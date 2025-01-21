@@ -1,5 +1,5 @@
-import { IsNumber,IsArray, IsString, IsNotEmpty, MinLength, MaxLength, IsInt, Min, Max, IsEmail, IsOptional, IsIP, ValidateIf } from 'class-validator';
-import { Expose } from 'class-transformer';
+import { IsNumber, IsArray, IsString, IsNotEmpty, MinLength, MaxLength, IsInt, Min, Max, IsEmail, IsOptional, IsIP, ValidateIf, IsBoolean } from 'class-validator';
+import { Expose, Type } from 'class-transformer';
 
 export class FunnelDto {
   @IsString()
@@ -19,9 +19,9 @@ export class FunnelDto {
   @MaxLength(50, { message: 'Page type must not exceed 50 characters' })
   ptype: string;
 
-  @ValidateIf(o => o.ptype === 'vsl')
+  @ValidateIf(o => (o.ptype === 'vsl' || (o.ptype === 'checkout' && !o.prospectId)))
   @IsEmail({}, { message: 'Invalid email format' })
-  @IsNotEmpty({ message: 'Email is required when page type is "vsl"' })
+  @IsNotEmpty({ message: 'Email is required when page type is "vsl" or when page type is "checkout" and no prospectId is provided' })
   email?: string;
 
   @IsOptional()
@@ -111,7 +111,6 @@ export class FunnelDto {
   @MaxLength(50, { each: true, message: 'Each tag must not exceed 50 characters' })
   tags?: string[];
 
-  // New properties
   @IsOptional()
   @IsString()
   @MaxLength(50, { message: 'Rotator ID must not exceed 50 characters' })
@@ -189,5 +188,81 @@ export class FunnelDto {
   @IsOptional()
   @IsString()
   quiz_answers?: string;
+
+  @ValidateIf(o => o.ptype === 'checkout')
+  @IsNotEmpty({ message: 'Credit card number is required for checkout' })
+  @IsString()
+  @MaxLength(255)
+  credit_card_number?: string;
+
+  @ValidateIf(o => o.ptype === 'checkout')
+  @IsNotEmpty({ message: 'Credit card expiry month is required for checkout' })
+  @IsString()
+  @MaxLength(2)
+  credit_card_expiry_month?: string;
+
+  @ValidateIf(o => o.ptype === 'checkout')
+  @IsNotEmpty({ message: 'Credit card expiry year is required for checkout' })
+  @IsString()
+  @MaxLength(4)
+  credit_card_expiry_year?: string;
+
+  @ValidateIf(o => o.ptype === 'checkout')
+  @IsNotEmpty({ message: 'CVC is required for checkout' })
+  @IsString()
+  @MaxLength(4)
+  cvc?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  billing_address?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  billing_city?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  billing_state?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  billing_zip?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2)
+  billing_country?: string;
+
+  @ValidateIf(o => o.ptype === 'checkout')
+  @IsNotEmpty({ message: 'Offers are required when page type is checkout' })
+  @IsString()
+  // @MaxLength(255, { message: 'Offers must not exceed 255 characters' })
+  offers: string;
+
+  @IsOptional()
+  @IsString()
+  products?: string;
+
+  @IsOptional()
+  @IsString()
+  utm_campaign_id?: string;
+
+  @IsOptional()
+  @IsString()
+  discount?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  is_trial?: boolean;
+
+  @ValidateIf((o) => ["upsell1", "upsell2", "upsell3"].includes(o.ptype))
+  @IsNotEmpty({ message: "Previous order ID is required for upsells" })
+  @IsString()
+  previousOrderId?: string
 }
 

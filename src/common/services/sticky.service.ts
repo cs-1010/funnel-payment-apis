@@ -48,6 +48,24 @@ interface ApiResponse {
 
 @Injectable()
 export class StickyService {
+  async updateProspect(prospectData: any): Promise<any> {
+    const apiUrl = `${this.apiUrl}/api/v1/prospect_update`;
+
+    try {
+      const response = await lastValueFrom(this.httpService.post(apiUrl, prospectData, {
+        auth: {
+          username: this.username,
+          password: this.password
+        },
+        httpsAgent: new (require('https').Agent)({ rejectUnauthorized: false })
+      }));
+
+      return response.data;
+    } catch (error) {
+      console.error('Error updating prospect:', error.response?.data || error.message);
+      throw new HttpException('Failed to update prospect', HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
   private readonly apiUrl: string;
   private readonly username: string;
   private readonly password: string;
@@ -59,6 +77,67 @@ export class StickyService {
     this.apiUrl = this.configService.get<string>('STICKY_API_URL') || '';
     this.username = this.configService.get<string>('STICKY_USERNAME') || '';
     this.password = this.configService.get<string>('STICKY_PASSWORD') || '';
+  }
+  async processNewOrder(orderData: any,isNewCheckout: boolean = false): Promise<any> {
+    let apiUrl = '';
+    if(isNewCheckout){
+      apiUrl = `${this.apiUrl}/api/v1/new_order`;
+    }else{
+      apiUrl = `${this.apiUrl}/api/v1/new_order_with_prospect`;
+    }
+    try {
+      const response = await lastValueFrom(this.httpService.post(apiUrl, orderData, {
+        auth: {
+          username: this.username,
+          password: this.password
+        },
+        httpsAgent: new (require('https').Agent)({ rejectUnauthorized: false })
+      }));
+
+      return response.data;
+    } catch (error) {
+      console.error('Error processing new order:', error.response?.data || error.message);
+      throw new HttpException('Failed to process new order', HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  async processNewUpsell(upsellData: any): Promise<any> {
+    const apiUrl = `${this.apiUrl}/api/v1/new_upsell`;
+
+    try {
+      const response = await lastValueFrom(this.httpService.post(apiUrl, upsellData, {
+        auth: {
+          username: this.username,
+          password: this.password
+        },
+        httpsAgent: new (require('https').Agent)({ rejectUnauthorized: false })
+      }));
+
+      return response.data;
+    } catch (error) {
+      console.error('Error processing new upsell:', error.response?.data || error.message);
+      throw new HttpException('Failed to process new upsell', HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  async getCampaignView(campaignId: number): Promise<any> {
+    const apiUrl = `${this.apiUrl}/api/v1/campaign_view`;
+    const data = { campaign_id: campaignId };
+
+    try {
+      const response = await lastValueFrom(this.httpService.post(apiUrl, data, {
+        auth: {
+          username: this.username,
+          password: this.password
+        },
+        httpsAgent: new (require('https').Agent)({ rejectUnauthorized: false })
+      }));
+
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching campaign view:', error.response?.data || error.message);
+      throw new HttpException('Failed to fetch campaign view', HttpStatus.INTERNAL_SERVER_ERROR);
+    }
   }
 
   async findOrCreateProspect(postData: FunnelDto, cId: string, ip: string): Promise<any | null> {
@@ -119,7 +198,7 @@ export class StickyService {
         
         return response.data;
       }
-    
+      return null;
   }
 
   private async getProspectInfo(email: string | null): Promise<any | ProspectInfo | null> {

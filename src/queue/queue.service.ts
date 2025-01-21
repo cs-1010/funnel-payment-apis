@@ -1,4 +1,4 @@
-import { Injectable, Logger  } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Task, TaskDocument } from './schemas/task.schema';
@@ -10,10 +10,10 @@ import { ConfigService } from '@nestjs/config';
 export class QueueService {
   private readonly logger = new Logger(QueueService.name);
 
-  constructor(@InjectModel(Task.name) private taskModel: Model<TaskDocument>,private readonly configService: ConfigService) {}
+  constructor(@InjectModel(Task.name) private taskModel: Model<TaskDocument>, private readonly configService: ConfigService) { }
 
   async addTask(url: string, method: string, body: any): Promise<TaskDocument> {
-    const baseUrl = this.configService.get<string>('BASE_URL');
+    const baseUrl = "";//this.configService.get<string>('BASE_URL');
     url = `${baseUrl}${url}`;
     const newTask = new this.taskModel({ url, method, body });
     return newTask.save();

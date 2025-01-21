@@ -9,7 +9,7 @@ import { ResponseService } from 'src/common/services/response.service';
 import { ActiveCampaignService } from 'src/active-campaign/active-campaign.service';
 import { FunnelSeeder } from './seeder/funnel.seeder';
 
-@Controller('funnel')
+@Controller('conversion')
 @UseGuards(ThrottlerGuard)
 export class FunnelController {
   constructor(private readonly funnelService: FunnelService,private readonly responseService:ResponseService,private readonly funnelSeeder: FunnelSeeder) {}

@@ -9,6 +9,7 @@ import { CommonModule } from 'src/common/common.module';
 import { ActiveCampaignService } from 'src/active-campaign/active-campaign.service';
 import { FunnelSeeder } from './seeder/funnel.seeder';
 import { Funnel, FunnelSchema } from './schemas/funnel.schema';
+import { OffersService } from 'src/offers/offers.service';
 
 @Module({
   imports: [
@@ -17,7 +18,7 @@ import { Funnel, FunnelSchema } from './schemas/funnel.schema';
     MongooseModule.forFeature([{ name: Funnel.name, schema: FunnelSchema }])
   ],
   controllers: [FunnelController],
-  providers: [FunnelService, StickyService, ResponseService, ActiveCampaignService, FunnelSeeder],
+  providers: [FunnelService, StickyService, ResponseService, ActiveCampaignService, FunnelSeeder,OffersService],
 })
 export class FunnelModule {}
 
