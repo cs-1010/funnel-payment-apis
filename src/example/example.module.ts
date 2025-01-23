@@ -6,5 +6,5 @@ import { ExampleService } from './example.service';
   controllers: [ExampleController],
   providers: [ExampleService],
 })
-export class ExampleModule {}
+export class ExampleModule { }
 

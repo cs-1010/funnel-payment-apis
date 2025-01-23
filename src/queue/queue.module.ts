@@ -1,17 +1,17 @@
-import { Global, Module } from '@nestjs/common';
-import { MongooseModule } from '@nestjs/mongoose';
-import { QueueService } from './queue.service';
-import { QueueController } from './queue.controller';
-import { Task, TaskSchema } from './schemas/task.schema';
+import { Module } from "@nestjs/common"
+import { MongooseModule } from "@nestjs/mongoose"
+import { ConfigModule, ConfigService } from "@nestjs/config"
+import { QueueController } from "./queue.controller"
+import { QueueService } from "./queue.service"
+import { Job, JobSchema } from "./schemas/job.schema"
 
-@Global()
 @Module({
-  imports: [
-    MongooseModule.forFeature([{ name: Task.name, schema: TaskSchema }]),
-  ],
-  providers: [QueueService],
+  imports: [MongooseModule.forFeature([{ name: Job.name, schema: JobSchema }]), ConfigModule],
   controllers: [QueueController],
+  providers: [
+    QueueService,
+    ConfigService, // Explicitly provide ConfigService
+  ],
   exports: [QueueService],
 })
-export class QueueModule {}
-
+export class QueueModule { }

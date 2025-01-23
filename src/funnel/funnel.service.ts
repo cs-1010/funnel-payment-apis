@@ -84,8 +84,8 @@ export class FunnelService {
       case 'vsl':
         response = await this.processVsl(funnelDto);
         const prospectId: string | null = response.prospectId ? response.prospectId : null;
-        await this.queueService.addTask("/funnel/sync-prospect-custom-fields-and-tags", "POST", { ...funnelDto, prospectId: prospectId });
-        await this.queueService.addTask("/funnel/update-customer-list", "POST", { ...funnelDto, prospectId: prospectId });
+        await this.queueService.addJob("PROSPECTCUSTOMERFIELDS", { ...funnelDto, prospectId: prospectId });
+        await this.queueService.addJob("UPDATELIST", { ...funnelDto, prospectId: prospectId });
         break;
       case 'checkout':
         response = await this.processCheckout(funnelDto);
@@ -95,11 +95,11 @@ export class FunnelService {
       case 'upsell3':
       case 'upsell4':
         response = await this.processUpsellPage(funnelDto);
-        await this.queueService.addTask("/funnel/sync-ac-tags-if-any", "POST", { ...response });
+        await this.queueService.addJob("TAG", { ...response });
         break;
     }
-    const nextUrl = this.getNextUrl(funnelDto.ptype, response)
-    response.nextUrl = nextUrl
+    // const nextUrl = this.getNextUrl(funnelDto.ptype, response)
+    // response.nextUrl = nextUrl
     return this.responseService.success(response, "Data processed successfully", 200);
   }
 
@@ -218,8 +218,8 @@ export class FunnelService {
     const response = await this.stickyService.processNewOrder(checkoutData, isNewCheckout);
     const data = { ...response, ...funnelDto };
     if (response.customerId) {
-      this.queueService.addTask("/update-customer-fields", "POST", data);
-      this.queueService.addTask("/sync-ac-tags-if-any", "POST", data);
+      this.queueService.addJob("CUSTOMFIELDS", data);
+      this.queueService.addJob("TAG", data);
     }
 
     return data;

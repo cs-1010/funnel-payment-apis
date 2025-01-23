@@ -1,58 +1,82 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
-import { Task, TaskDocument } from './schemas/task.schema';
-import axios from 'axios';
-import { ConfigService } from '@nestjs/config';
-
+import { Injectable, Logger, type OnModuleInit } from "@nestjs/common"
+import { InjectModel } from "@nestjs/mongoose"
+import type { Model } from "mongoose"
+import { Job, type JobDocument } from "./schemas/job.schema"
+import * as fs from "fs/promises"
+import * as path from "path"
 
 @Injectable()
-export class QueueService {
-  private readonly logger = new Logger(QueueService.name);
+export class QueueService implements OnModuleInit {
+  private readonly logger = new Logger(QueueService.name)
+  private readonly failedJobsDir: string
+  private readonly retryInterval: number = 5 * 60 * 1000; // 1 minute for testing purposes
 
-  constructor(@InjectModel(Task.name) private taskModel: Model<TaskDocument>, private readonly configService: ConfigService) { }
-
-  async addTask(url: string, method: string, body: any): Promise<TaskDocument> {
-    const baseUrl = "";//this.configService.get<string>('BASE_URL');
-    url = `${baseUrl}${url}`;
-    const newTask = new this.taskModel({ url, method, body });
-    return newTask.save();
+  constructor(
+    @InjectModel(Job.name) private jobModel: Model<JobDocument>
+  ) {
+    this.failedJobsDir = path.join(process.cwd(), 'failed-jobs');
   }
 
-  async processNextTask(): Promise<void> {
-    const task = await this.taskModel.findOneAndUpdate(
-      { status: 'pending' },
-      { status: 'processing' },
-      { sort: { createdAt: 1 }, new: true }
-    );
+  async onModuleInit() {
+    await this.ensureFailedJobsDir()
+    this.startRetryProcess()
+  }
 
-    if (!task) {
-      return;
-    }
-
+  async addJob(type: string, body: any): Promise<JobDocument | null> {
+    const newJob = new this.jobModel({ type, body, status: "pending" })
     try {
-      const response = await axios({
-        method: task.method,
-        url: task.url,
-        data: task.body,
-      });
-
-      task.status = 'completed';
-      task.result = response.data;
-      await task.save();
-
-      this.logger.debug(`Task ${task._id} completed successfully`);
+      throw new Error("Failed job");
+      // return await newJob.save()
     } catch (error) {
-      task.status = 'failed';
-      task.result = { error: error.message };
-      await task.save();
-
-      this.logger.error(`Task ${task._id} failed: ${error.message}`);
+      this.logger.error(`Failed to add job to database: ${error.message}`)
+      await this.saveFailedJobToFile(newJob)
+      return null
     }
   }
 
-  async startProcessing(interval: number = 5000): Promise<void> {
-    setInterval(() => this.processNextTask(), interval);
+  private async ensureFailedJobsDir() {
+    try {
+      await fs.mkdir(this.failedJobsDir, { recursive: true })
+    } catch (error) {
+      this.logger.error(`Failed to create failed jobs directory: ${error.message}`)
+    }
   }
+
+  private async saveFailedJobToFile(job: JobDocument) {
+    const fileName = `${Date.now()}-${job._id}.json`
+    const filePath = path.join(this.failedJobsDir, fileName)
+    try {
+      await fs.writeFile(filePath, JSON.stringify(job.toJSON()))
+      this.logger.log(`Failed job saved to file: ${fileName}`)
+    } catch (error) {
+      this.logger.error(`Failed to save job to file: ${error.message}`)
+    }
+  }
+
+  private startRetryProcess() {
+    setInterval(() => this.retryFailedJobs(), this.retryInterval)
+    this.logger.log("Retry process started")
+  }
+
+  private async retryFailedJobs() {
+    this.logger.log("Retrying failed jobs...")
+    const files = await fs.readdir(this.failedJobsDir)
+    this.logger.log(`Found ${files.length} failed job(s)`)
+
+    for (const file of files) {
+      const filePath = path.join(this.failedJobsDir, file)
+      try {
+        const jobData = JSON.parse(await fs.readFile(filePath, "utf-8"))
+        const newJob = new this.jobModel(jobData)
+        await newJob.save()
+        await fs.unlink(filePath)
+        this.logger.log(`Successfully retried and added job from file: ${file}`)
+      } catch (error) {
+        this.logger.error(`Failed to retry job from file ${file}: ${error.message}`)
+      }
+    }
+  }
+
+
 }
 
