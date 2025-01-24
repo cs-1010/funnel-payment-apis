@@ -1,4 +1,4 @@
-import { IsNumber, IsArray, IsString, IsNotEmpty, MinLength, MaxLength, IsInt, Min, Max, IsEmail, IsOptional, IsIP, ValidateIf, IsBoolean } from 'class-validator';
+import { IsNumber, IsArray, IsString, IsNotEmpty, MinLength, MaxLength, IsInt, Min, Max, IsEmail, IsOptional, IsIP, ValidateIf, IsBoolean, IsObject } from 'class-validator';
 import { Expose, Type } from 'class-transformer';
 
 export class FunnelDto {
@@ -264,5 +264,11 @@ export class FunnelDto {
   @IsNotEmpty({ message: "Previous order ID is required for upsells" })
   @IsString()
   previousOrderId?: string
+
+  @IsOptional()
+  @IsObject()
+  @Type(() => Object)
+  fallbackOffers?: Record<string, any>
+
 }
 

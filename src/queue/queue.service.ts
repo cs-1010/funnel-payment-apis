@@ -25,8 +25,8 @@ export class QueueService implements OnModuleInit {
   async addJob(type: string, body: any): Promise<JobDocument | null> {
     const newJob = new this.jobModel({ type, body, status: "pending" })
     try {
-      throw new Error("Failed job");
-      // return await newJob.save()
+
+      return await newJob.save()
     } catch (error) {
       this.logger.error(`Failed to add job to database: ${error.message}`)
       await this.saveFailedJobToFile(newJob)

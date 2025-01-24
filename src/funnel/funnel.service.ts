@@ -16,7 +16,7 @@ import { HttpService } from '@nestjs/axios';
 @Injectable()
 export class FunnelService {
   private funnel: Funnel | null = null;
-
+  private failureReasons: string[] = [];
 
   private async getFunnelFromDatabase(fname: string, cId: number): Promise<void> {
     this.funnel = await this.funnelModel.findOne({ fname, cId }).exec()
@@ -74,6 +74,16 @@ export class FunnelService {
     private readonly offersService: OffersService,
     private readonly httpService: HttpService) {
     this.shippingId = 2; // Default value, as free shipping
+    this.failureReasons = [
+      "Pick up card - SF",
+      "Insufficient Funds",
+      "Do Not Honor",
+      "This transaction has been declined",
+      "Activity limit exceeded",
+      "Pick up card - NF",
+      "Pick up card - S",
+      "Issuer Declined MCC"
+    ]
   }
 
 
@@ -134,7 +144,7 @@ export class FunnelService {
   }
 
   async processUpsellPage(funnelDto: FunnelDto): Promise<any> {
-    const upsellOffers = await this.offersService.fetchOfferData(funnelDto.offers, funnelDto.cId)
+    const upsellOffers = [JSON.parse(Buffer.from(funnelDto.offers, 'base64').toString('utf-8'))];
 
     if (upsellOffers.length > 0) {
       const upsellData = {
@@ -147,11 +157,31 @@ export class FunnelService {
         custom_fields: this.getOrderCustomFields(funnelDto, "no"),
       }
 
-      const response = await this.stickyService.processNewUpsell(upsellData)
+      let response = await this.stickyService.processNewUpsell(upsellData)
+      //let response = { error_message: "Insufficient Funds" };
+      if (response.error_message
+        && this.failureReasons.findIndex(reason => reason.toLowerCase() == response.error_message.toLowerCase()) !== -1
+        && funnelDto.fallbackOffers
+        && funnelDto.fallbackOffers.fallbackCampaignId
+        && funnelDto.fallbackOffers.offers
+        && funnelDto.fallbackOffers.offers.findIndex(offer => offer.declinedProductId == upsellOffers[0].product_id) !== -1
+      ) {
+        response = await this.handleDeclineRedirectUpsell(upsellData, funnelDto, upsellOffers[0].product_id);
+      }
       return { ...response, ...funnelDto };
     }
 
     throw new HttpException("No valid offers found", HttpStatus.BAD_REQUEST)
+  }
+
+  async handleDeclineRedirectUpsell(upsellData: any, funnelDto: FunnelDto, declineProductId: any) {
+    upsellData.campaignId = funnelDto.fallbackOffers.fallbackCampaignId;
+    upsellData.offers = [
+      funnelDto.fallbackOffers.offers[funnelDto.fallbackOffers.offers.findIndex(offer => offer.declinedProductId == declineProductId)].offer
+    ];
+
+    let response = await this.stickyService.processNewUpsell(upsellData)
+    return { ...response, isDeclineRedirect: 1 };
   }
 
   async processCheckout(funnelDto: FunnelDto): Promise<any> {
@@ -215,14 +245,44 @@ export class FunnelService {
 
 
     // Process checkout
-    const response = await this.stickyService.processNewOrder(checkoutData, isNewCheckout);
-    const data = { ...response, ...funnelDto };
+    let response = await this.stickyService.processNewOrder(checkoutData, isNewCheckout);
+
+    //response.error_message = "Insufficient Funds";  //for decline redirect testing
+    let data = { ...response, ...funnelDto };
+    if (data.error_message
+      && this.failureReasons.findIndex(reason => reason.toLowerCase() === data.error_message.toLowerCase()) !== -1
+      && funnelDto.fallbackOffers
+      && funnelDto.fallbackOffers.fallbackCampaignId
+      && funnelDto.fallbackOffers.offer1
+    ) {
+      //handling decline redirect
+      response = await this.handleDeclineRedirectOnCheckout(funnelDto, checkoutData, isNewCheckout);
+      data = { ...response, ...funnelDto };
+    }
+
+
     if (response.customerId) {
       this.queueService.addJob("CUSTOMFIELDS", data);
       this.queueService.addJob("TAG", data);
     }
 
     return data;
+
+  }
+  async handleDeclineRedirectOnCheckout(funnelDto: FunnelDto, checkoutData: any, isNewCheckout: boolean) {
+    checkoutData.campaignId = funnelDto.fallbackOffers.fallbackCampaignId;
+    checkoutData.offers[0] = { ...funnelDto.fallbackOffers.offer1 };
+    let data = await this.stickyService.processNewOrder(checkoutData, isNewCheckout);
+    //let data = { error_message: "Insufficient Funds" }; //for second stage of decline redirect testing
+    if (data.error_message
+      && this.failureReasons.findIndex(reason => reason.toLowerCase() === data.error_message.toLowerCase())
+      && funnelDto.fallbackOffers.offer2
+    ) {
+      checkoutData.offers[0] = { ...funnelDto.fallbackOffers.offer2 };
+      data = await this.stickyService.processNewOrder(checkoutData, isNewCheckout);
+
+    }
+    return { ...data, ...checkoutData, isDeclineRedirect: 1 };
 
   }
 
