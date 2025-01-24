@@ -382,10 +382,7 @@ export class FunnelService {
     }, {});
   }
 
-  async syncActiveCampaignTagsIfAny(email: string, prospectId: any | null, response: any) {
-    //
-    return response
-  }
+
 
   private getOrderCustomFields(funnelDto: FunnelDto, is_book: string = "no"): any[] {
     const fields = [];
