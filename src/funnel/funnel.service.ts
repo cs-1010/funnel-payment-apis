@@ -89,7 +89,7 @@ export class FunnelService {
 
   async process(funnelDto: FunnelDto) {
     let response: any = null;
-    await this.getFunnelFromDatabase(funnelDto.fname, funnelDto.cId)
+    // await this.getFunnelFromDatabase(funnelDto.fname, funnelDto.cId)
     switch (funnelDto.ptype) {
       case 'vsl':
         response = await this.processVsl(funnelDto);
