@@ -9,7 +9,7 @@ export class QueueController {
 
   @Post('task')
   async addJob(@Body() taskData: CreateTaskDto) {
-    const task = await this.queueService.addJob(taskData.jobType, taskData.body);
+    const task = await this.queueService.addJob(taskData.jobType, taskData.body, taskData.visitorId ? taskData.visitorId : null);
     return new CustomResponse({ jobId: task._id }, "Task Added Successfully", 200);
   }
 

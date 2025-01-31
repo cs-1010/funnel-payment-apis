@@ -23,8 +23,14 @@ export class QueueService implements OnModuleInit {
     this.startRetryProcess()
   }
 
-  async addJob(type: string, body: any): Promise<JobDocument | null> {
-    const newJob = new this.jobModel({ type, body, status: JobType.PENDING })
+  async addJob(type: string, body: any, visitorId?: string): Promise<JobDocument | null> {
+
+    let newJob = null;
+    if (visitorId) {
+      newJob = new this.jobModel({ type, body, status: JobType.PENDING, visitorId })
+    } else {
+      newJob = new this.jobModel({ type, body, status: JobType.PENDING })
+    }
     try {
 
       return await newJob.save()

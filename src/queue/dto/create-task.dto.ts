@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsEnum, IsObject } from "class-validator"
+import { IsNotEmpty, IsEnum, IsObject, IsOptional, IsString } from "class-validator"
 import { Type } from "class-transformer"
 
 export enum JobType {
@@ -15,5 +15,10 @@ export class CreateTaskDto {
     @IsObject()
     @Type(() => Object)
     body: Record<string, any>
+
+
+    @IsOptional()
+    @IsString()
+    visitorId?: string
 }
 
