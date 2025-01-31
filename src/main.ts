@@ -3,7 +3,8 @@ import { ConfigService } from '@nestjs/config';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
-import { DieInterceptor } from './common/interceptors/die.interceptor';
+import { HttpExceptionFilter } from './common/filters/http-exception.filter';
+import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 // import { QueueService } from './queue/queue.service';
 // import { CommandModule, CommandService } from 'nestjs-command';
 
@@ -27,11 +28,24 @@ async function bootstrap() {
   );
   // Use the underlying Express instance to set 'trust proxy'
   app.set('trust proxy', 1);
-  app.useGlobalInterceptors(new DieInterceptor());
+
   app.setGlobalPrefix("api");
+
+  app.enableCors();
+  app.useGlobalFilters(new HttpExceptionFilter()) //This line was already correctly placed.  The error message is misleading.
+  app.useGlobalInterceptors(new TransformInterceptor())
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  )
+
+
   // const queueService = app.get(QueueService);
   // queueService.startProcessing();
-  
+
   await app.listen(port);
 
   logger.log(`Application is running on: http://localhost:${port}`);
