@@ -78,11 +78,11 @@ export class StickyService {
     this.username = this.configService.get<string>('STICKY_USERNAME') || '';
     this.password = this.configService.get<string>('STICKY_PASSWORD') || '';
   }
-  async processNewOrder(orderData: any,isNewCheckout: boolean = false): Promise<any> {
+  async processNewOrder(orderData: any, isNewCheckout: boolean = false): Promise<any> {
     let apiUrl = '';
-    if(isNewCheckout){
+    if (isNewCheckout) {
       apiUrl = `${this.apiUrl}/api/v1/new_order`;
-    }else{
+    } else {
       apiUrl = `${this.apiUrl}/api/v1/new_order_with_prospect`;
     }
     try {
@@ -141,9 +141,9 @@ export class StickyService {
   }
 
   async findOrCreateProspect(postData: FunnelDto, cId: string, ip: string): Promise<any | null> {
-   
+
     const customerInfo = await this.getProspectInfo(postData.email);
-  
+
     const prospectData: ProspectData = {
       campaignId: cId,
       email: postData.email,
@@ -158,8 +158,8 @@ export class StickyService {
       ipAddress: ip || '127.0.0.1',
     };
 
-    
-  
+
+
 
     if (postData.AFID) {
       prospectData.AFID = this.cleanString(postData.AFID);
@@ -182,28 +182,28 @@ export class StickyService {
       prospectData.C3 = this.cleanString(postData.C3);
     }
 
- 
-   
-      const apiUrl = `${this.apiUrl}/api/v1/new_prospect`;
-      const response: AxiosResponse<any> = await firstValueFrom(
-        this.httpService.post<any>(apiUrl, prospectData, {
-          auth: {
-            username: this.username,
-            password: this.password,
-          },
-        })
-      );
-      
-      if (parseInt(response.data.response_code) === 100) {
-        
-        return response.data;
-      }
-      return null;
+
+
+    const apiUrl = `${this.apiUrl}/api/v1/new_prospect`;
+    const response: AxiosResponse<any> = await firstValueFrom(
+      this.httpService.post<any>(apiUrl, prospectData, {
+        auth: {
+          username: this.username,
+          password: this.password,
+        },
+      })
+    );
+
+    if (parseInt(response.data.response_code) === 100) {
+
+      return response.data;
+    }
+    return null;
   }
 
   private async getProspectInfo(email: string | null): Promise<any | ProspectInfo | null> {
     const url = `${this.apiUrl}/api/v1/prospect_find`;
- 
+
     const criteria = email ? { email } : {};
     const data = {
       campaign_id: "all",
@@ -212,7 +212,7 @@ export class StickyService {
       criteria,
       return_type: "prospect_view"
     };
-   
+
     try {
       const response: AxiosResponse = await firstValueFrom(
         this.httpService.post(url, data, {
@@ -223,7 +223,7 @@ export class StickyService {
           httpsAgent: new https.Agent({ rejectUnauthorized: false })
         })
       );
-      
+
       if (parseInt(response.data.response_code) === 100) {
         const keys = Object.keys(response.data.data);
         return response.data.data[keys[0]];
@@ -231,30 +231,30 @@ export class StickyService {
         return null;
       }
     } catch (error) {
-     
+
       return null;
     }
   }
 
   async updateProspectCustomFields(prospectId: string, data: any) {
     const url = `${this.apiUrl}/api/v2/prospects/${prospectId}/custom_fields`;
-    
-    try {
-        const response = await lastValueFrom(this.httpService.post(url, data, {
-            auth: {
-                username: this.username,
-                password: this.password
-            },
-            httpsAgent: new (require('https').Agent)({ rejectUnauthorized: false })
-        }));
-        return response.data;
-    } catch (error) {
-        console.error('Error updating prospect custom fields:', error);
-        throw error;
-    }
-}
 
- 
+    try {
+      const response = await lastValueFrom(this.httpService.post(url, data, {
+        auth: {
+          username: this.username,
+          password: this.password
+        },
+        httpsAgent: new (require('https').Agent)({ rejectUnauthorized: false })
+      }));
+      return response.data;
+    } catch (error) {
+      console.error('Error updating prospect custom fields:', error);
+      throw error;
+    }
+  }
+
+
 
   private cleanString(str: string): string {
     return str.replace(/[^a-zA-Z0-9]/g, '');

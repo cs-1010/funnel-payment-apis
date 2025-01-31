@@ -4,6 +4,7 @@ import type { Model } from "mongoose"
 import { Job, type JobDocument } from "./schemas/job.schema"
 import * as fs from "fs/promises"
 import * as path from "path"
+import { JobType } from "src/common/Dto/job.dto"
 
 @Injectable()
 export class QueueService implements OnModuleInit {
@@ -23,7 +24,7 @@ export class QueueService implements OnModuleInit {
   }
 
   async addJob(type: string, body: any): Promise<JobDocument | null> {
-    const newJob = new this.jobModel({ type, body, status: "pending" })
+    const newJob = new this.jobModel({ type, body, status: JobType.PENDING })
     try {
 
       return await newJob.save()

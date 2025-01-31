@@ -11,6 +11,8 @@ import { ActiveCampaignService } from 'src/active-campaign/active-campaign.servi
 import { OffersService } from 'src/offers/offers.service';
 import { lastValueFrom } from 'rxjs';
 import { HttpService } from '@nestjs/axios';
+import { CustomResponse } from 'src/common/interfaces/custom-response.interface';
+import { JOBS } from 'src/common/Dto/job.dto';
 
 
 @Injectable()
@@ -88,14 +90,15 @@ export class FunnelService {
 
 
   async process(funnelDto: FunnelDto) {
+
     let response: any = null;
     // await this.getFunnelFromDatabase(funnelDto.fname, funnelDto.cId)
     switch (funnelDto.ptype) {
       case 'vsl':
         response = await this.processVsl(funnelDto);
         const prospectId: string | null = response.prospectId ? response.prospectId : null;
-        await this.queueService.addJob("PROSPECTCUSTOMERFIELDS", { ...funnelDto, prospectId: prospectId });
-        await this.queueService.addJob("UPDATELIST", { ...funnelDto, prospectId: prospectId });
+        await this.queueService.addJob(JOBS.STICKY_PROSPECT_CUSTOM_FIELDS, { ...funnelDto, prospectId: prospectId });
+        await this.queueService.addJob(JOBS.AC_UPDATE_LIST, { ...funnelDto, prospectId: prospectId });
         break;
       case 'checkout':
         response = await this.processCheckout(funnelDto);
@@ -105,11 +108,11 @@ export class FunnelService {
       case 'upsell3':
       case 'upsell4':
         response = await this.processUpsellPage(funnelDto);
-        await this.queueService.addJob("TAG", { ...response });
+        await this.queueService.addJob(JOBS.AC_TAGS, { ...response });
         break;
     }
 
-    return this.responseService.success(response, "Data processed successfully", 200);
+    return new CustomResponse(response, "Operation Completed Successfully", 200);
   }
 
   private getNextUrl(ptype: string, response: any): string {
@@ -261,8 +264,8 @@ export class FunnelService {
 
 
     if (response.customerId) {
-      this.queueService.addJob("CUSTOMFIELDS", data);
-      this.queueService.addJob("TAG", data);
+      this.queueService.addJob(JOBS.STICKY_ORDER_CUSTOM_FIELDS, data);
+      this.queueService.addJob(JOBS.AC_TAGS, data);
     }
 
     return data;

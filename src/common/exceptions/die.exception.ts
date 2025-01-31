@@ -1,8 +1,8 @@
-import { HttpException, HttpStatus } from '@nestjs/common';
+import { HttpException, HttpStatus } from "@nestjs/common"
 
 export class DieException extends HttpException {
-  constructor(response: string | object) {
-    super(response, HttpStatus.OK);
+  constructor(response: string | { message: string; data?: any }) {
+    super(response, HttpStatus.INTERNAL_SERVER_ERROR)
   }
 }
 
