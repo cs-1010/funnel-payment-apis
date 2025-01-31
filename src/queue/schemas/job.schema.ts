@@ -1,4 +1,5 @@
 import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose"
+import { string } from "joi"
 import { type Document, Schema as MongooseSchema } from "mongoose"
 
 export type JobDocument = Job & Document
@@ -28,10 +29,14 @@ export class Job {
   result: any
 
   @Prop({
-    enum: ["AC_TAGS", "STICKY_ORDER_CUSTOM_FIELDS", "STICKY_PROSPECT_CUSTOM_FIELDS", "AC_UPDATE_LIST"],
+    enum: ["AC_TAGS", "STICKY_ORDER_CUSTOM_FIELDS", "STICKY_PROSPECT_CUSTOM_FIELDS", "AC_UPDATE_LIST", "PAGE_VISIT", "PAGE_CLICK"],
     required: true,
   })
   type: string
+
+
+  @Prop({ type: String, required: false })
+  visitorId?: string
 }
 
 export const JobSchema = SchemaFactory.createForClass(Job)
