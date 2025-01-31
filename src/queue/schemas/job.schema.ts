@@ -45,12 +45,3 @@ JobSchema.index(
   },
 )
 
-// Additional indexes
-JobSchema.index({ createdAt: 1 })
-JobSchema.index({ updatedAt: 1 })
-JobSchema.index({ type: 1 })
-JobSchema.index({ status: 1 })
-
-// Compound index for type and status
-JobSchema.index({ type: 1, status: 1 })
-
