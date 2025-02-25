@@ -1,28 +1,25 @@
 import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose"
-import { string } from "joi"
-import { type Document, Schema as MongooseSchema } from "mongoose"
+import { Document, Schema as MongooseSchema } from "mongoose"
 
 export type JobDocument = Job & Document
 
 @Schema({
-  timestamps: true,
+  timestamps: true, // This will automatically add and manage createdAt and updatedAt
   timeseries: {
-    timeField: "updatedAt",
+    timeField: "createdAt",
     metaField: "type",
     granularity: "seconds",
   },
 })
 export class Job {
-  @Prop({ type: Date })
-  createdAt: Date
-
-  @Prop({ type: Date })
-  updatedAt: Date
-
   @Prop({ type: MongooseSchema.Types.Mixed })
   body: any
 
-  @Prop({ enum: ["PENDING", "PROCESSING", "COMPLETED", "FAILED"], default: "PENDING" })
+  @Prop({
+    enum: ["PENDING", "PROCESSING", "COMPLETED", "FAILED"],
+    default: "PENDING",
+    index: true
+  })
   status: string
 
   @Prop({ type: MongooseSchema.Types.Mixed })
@@ -34,19 +31,20 @@ export class Job {
   })
   type: string
 
-
   @Prop({ type: String, required: false })
   visitorId?: string
+
+  @Prop({ type: Date })
+  completedAt?: Date
 }
 
 export const JobSchema = SchemaFactory.createForClass(Job)
 
-// Index for automatic document removal based on updatedAt
+// Index for automatic document removal based on completedAt
 JobSchema.index(
-  { updatedAt: 1 },
+  { completedAt: 1 },
   {
     expireAfterSeconds: 30 * 24 * 60 * 60, // 30 days
     partialFilterExpression: { status: "COMPLETED" },
   },
 )
-

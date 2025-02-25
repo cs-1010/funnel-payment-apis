@@ -35,6 +35,7 @@ interface ProspectData {
   C1?: string;
   C2?: string;
   C3?: string;
+  click_id?: string;
   utm_campaign?: string;
 }
 
@@ -158,7 +159,9 @@ export class StickyService {
       ipAddress: ip || '127.0.0.1',
     };
 
-
+    if (postData.click_id) {
+      prospectData.click_id = postData.click_id;
+    }
 
 
     if (postData.AFID) {
