@@ -6,7 +6,7 @@ export type JobDocument = Job & Document
 @Schema({
   timestamps: true, // This will automatically add and manage createdAt and updatedAt
   timeseries: {
-    timeField: "createdAt",
+    timeField: "updatedAt",
     metaField: "type",
     granularity: "seconds",
   },
@@ -42,7 +42,7 @@ export const JobSchema = SchemaFactory.createForClass(Job)
 
 // Index for automatic document removal based on completedAt
 JobSchema.index(
-  { completedAt: 1 },
+  { updatedAt: 1 },
   {
     expireAfterSeconds: 30 * 24 * 60 * 60, // 30 days
     partialFilterExpression: { status: "COMPLETED" },
