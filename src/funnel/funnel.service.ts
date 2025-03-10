@@ -146,7 +146,10 @@ export class FunnelService {
   }
 
   async processUpsellPage(funnelDto: FunnelDto): Promise<any> {
-    const upsellOffers = [JSON.parse(Buffer.from(funnelDto.offers, 'base64').toString('utf-8'))];
+    const upsellOffers = [];
+    if (funnelDto.offers.main) {
+      upsellOffers.push({ ...funnelDto.offers.main });
+    }
 
     if (upsellOffers.length > 0) {
       const upsellData = {
@@ -188,11 +191,12 @@ export class FunnelService {
 
   async processCheckout(funnelDto: FunnelDto): Promise<any> {
     let offers: any = [];
-    let offer1: any = JSON.parse(Buffer.from(funnelDto.offers.split(',')[0], 'base64').toString('utf-8'));
-    offers.push(offer1);
-    let offer2: any = funnelDto.offers.split(',')[1] ? JSON.parse(Buffer.from(funnelDto.offers.split(',')[1], 'base64').toString('utf-8')) : null;
-    if (offer2) {
-      offers.push(offer2);
+    if (funnelDto.offers.main) {
+      offers.push({ ...funnelDto.offers.main });
+    }
+
+    if (funnelDto.offers.bump) {
+      offers.push({ ...funnelDto.offers.bump })
     }
 
 
