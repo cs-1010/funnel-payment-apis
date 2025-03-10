@@ -4,6 +4,8 @@ import { Type } from "class-transformer"
 export enum JobType {
     PAGE_VISIT = "PAGE_VISIT",
     PAGE_CLICK = "PAGE_CLICK",
+    SIGNUP= "SIGNUP",
+    SALE= "SALE",
 }
 
 export class CreateTaskDto {

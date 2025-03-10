@@ -31,7 +31,13 @@ async function bootstrap() {
 
   app.setGlobalPrefix("api");
 
-  app.enableCors();
+  //app.enableCors();
+
+  app.enableCors({
+    origin: 'http://localhost:5173', // Replace with your frontend URL
+    credentials: true, // Allow credentials (cookies, headers, etc.)
+  });
+
   app.useGlobalFilters(new HttpExceptionFilter()) //This line was already correctly placed.  The error message is misleading.
   app.useGlobalInterceptors(new TransformInterceptor())
   app.useGlobalPipes(
