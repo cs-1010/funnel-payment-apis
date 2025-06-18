@@ -2,7 +2,7 @@ import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { FunnelDto } from './dto/funnel.dto';
 import { StickyService } from 'src/common/services/sticky.service';
 import { ResponseService } from 'src/common/services/response.service';
-import { DieException } from 'src/common/exceptions/die.exception';
+//import { DieException } from 'src/common/exceptions/die.exception';
 import { QueueService } from 'src/queue/queue.service';
 import { InjectModel } from '@nestjs/mongoose';
 import { Funnel } from './schemas/funnel.schema';
@@ -13,7 +13,7 @@ import { lastValueFrom } from 'rxjs';
 import { HttpService } from '@nestjs/axios';
 import { CustomResponse } from 'src/common/interfaces/custom-response.interface';
 import { JOBS } from 'src/common/Dto/job.dto';
-
+import { ConversionType } from './dto/funnel.dto';
 
 @Injectable()
 export class FunnelService {
@@ -31,8 +31,8 @@ export class FunnelService {
     try {
       // Find the funnel document
       const funnel = await this.funnelModel.findOne({
-        cId: funnelDto.cId,
-        fname: funnelDto.fname
+        //cId: funnelDto.stickyCampaignId,
+        //fname: funnelDto.fname
       });
 
       if (!funnel) {
@@ -93,20 +93,19 @@ export class FunnelService {
 
     let response: any = null;
     // await this.getFunnelFromDatabase(funnelDto.fname, funnelDto.cId)
-    switch (funnelDto.ptype) {
-      case 'vsl':
+    switch (funnelDto.conversionType) {
+      case ConversionType.SIGNUP:
+        
         response = await this.processVsl(funnelDto);
-        const prospectId: string | null = response.prospectId ? response.prospectId : null;
-        await this.queueService.addJob(JOBS.STICKY_PROSPECT_CUSTOM_FIELDS, { ...funnelDto, prospectId: prospectId });
-        await this.queueService.addJob(JOBS.AC_UPDATE_LIST, { ...funnelDto, prospectId: prospectId });
+        //const prospectId: string | null = response.prospectId ? response.prospectId : null;
+        return new CustomResponse(response, "Operation Completed Successfully", 200);
+        //await this.queueService.addJob(JOBS.STICKY_PROSPECT_CUSTOM_FIELDS, { ...funnelDto, prospectId: prospectId });
+        //await this.queueService.addJob(JOBS.AC_UPDATE_LIST, { ...funnelDto, prospectId: prospectId });
         break;
-      case 'checkout':
+      case ConversionType.PURCHASE:
         response = await this.processCheckout(funnelDto);
         break;
-      case 'upsell1':
-      case 'upsell2':
-      case 'upsell3':
-      case 'upsell4':
+      case ConversionType.UPSELL:
         response = await this.processUpsellPage(funnelDto);
         await this.queueService.addJob(JOBS.AC_TAGS, { ...response });
         break;
@@ -153,10 +152,10 @@ export class FunnelService {
 
     if (upsellOffers.length > 0) {
       const upsellData = {
-        previousOrderId: funnelDto.previousOrderId,
-        shippingId: await this.getShippingId(funnelDto.cId),
+        previousOrderId: funnelDto.preOrderId,
+       // shippingId: await this.getShippingId(funnelDto.stickyCampaignId),
         ipAddress: funnelDto.ipAddress,
-        campaignId: funnelDto.cId,
+       // campaignId: funnelDto.stickyCampaignId,
         offers: upsellOffers,
         notes: "Upsell Purchased",
         custom_fields: this.getOrderCustomFields(funnelDto, "no"),
@@ -199,23 +198,20 @@ export class FunnelService {
       offers.push({ ...funnelDto.offers.bump })
     }
 
-
-
-
     let checkoutData: any = {};
     let isNewCheckout: boolean = false;
     if (funnelDto.prospectId) {
       // Prepare checkout data
       checkoutData = {
         prospectId: funnelDto.prospectId,
-        creditCardNumber: funnelDto.credit_card_number.replace(/\s/g, ''),
-        expirationDate: `${funnelDto.credit_card_expiry_month}${funnelDto.credit_card_expiry_year.substr(-2)}`,
+        creditCardNumber: funnelDto.creditCardNumber.replace(/\s/g, ''),
+        expirationDate: `${funnelDto.ccExpiryMonth}${funnelDto.ccExpiryYear.substr(-2)}`,
         CVV: 'OVERRIDE',
-        creditCardType: this.getCardType(funnelDto.credit_card_number),
-        shippingId: (await this.getShippingId(funnelDto.cId)).toString(),
+        creditCardType: this.getCardType(funnelDto.creditCardNumber),
+        //shippingId: (await this.getShippingId(funnelDto.stickyCampaignId)).toString(),
         tranType: 'Sale',
         ipAddress: funnelDto.ipAddress,
-        campaignId: funnelDto.cId,
+        //campaignId: funnelDto.stickyCampaignId,
         offers: offers,
         custom_fields: this.getOrderCustomFields(funnelDto, 'yes')
       };
@@ -223,14 +219,14 @@ export class FunnelService {
     } else {
       isNewCheckout = true;
       checkoutData = {
-        creditCardNumber: funnelDto.credit_card_number.replace(/\s/g, ''),
-        expirationDate: `${funnelDto.credit_card_expiry_month}${funnelDto.credit_card_expiry_year.substr(-2)}`,
+        creditCardNumber: funnelDto.creditCardNumber.replace(/\s/g, ''),
+        expirationDate: `${funnelDto.ccExpiryMonth}${funnelDto.ccExpiryYear.substr(-2)}`,
         CVV: 'OVERRIDE',
-        creditCardType: this.getCardType(funnelDto.credit_card_number),
-        shippingId: (await this.getShippingId(funnelDto.cId)).toString(),
+        creditCardType: this.getCardType(funnelDto.creditCardNumber),
+        //shippingId: (await this.getShippingId(funnelDto.stickyCampaignId)).toString(),
         tranType: 'Sale',
         ipAddress: funnelDto.ipAddress,
-        campaignId: funnelDto.cId,
+        //campaignId: funnelDto.stickyCampaignId,
         offers: offers,
         custom_fields: this.getOrderCustomFields(funnelDto, 'yes'),
         shippingCountry: "US"
@@ -294,28 +290,28 @@ export class FunnelService {
 
   private processOtherFields(checkoutData: any, funnelDto: FunnelDto) {
     //filling other info
-    if (funnelDto.AFFID) {
-      checkoutData.AFFID = funnelDto.AFFID;
+    if (funnelDto.affId) {
+      checkoutData.AFFID = funnelDto.affId;
     }
 
-    if (funnelDto.AFID) {
-      checkoutData.AFID = funnelDto.AFID;
+    if (funnelDto.afId) {
+      checkoutData.AFID = funnelDto.afId;
     }
 
-    if (funnelDto.C1) {
-      checkoutData.C1 = funnelDto.C1;
+    if (funnelDto.c1) {
+      checkoutData.C1 = funnelDto.c1;
     }
 
-    if (funnelDto.C2) {
-      checkoutData.C2 = funnelDto.C2;
+    if (funnelDto.c2) {
+      checkoutData.C2 = funnelDto.c2;
     }
 
-    if (funnelDto.SID) {
-      checkoutData.SID = funnelDto.SID;
+    if (funnelDto.sid) {
+      checkoutData.SID = funnelDto.sid;
     }
 
-    if (funnelDto.C3) {
-      checkoutData.C3 = funnelDto.C3;
+    if (funnelDto.c3) {
+      checkoutData.C3 = funnelDto.c3;
     }
     return checkoutData;
   }
@@ -452,8 +448,8 @@ export class FunnelService {
       }
     });
 
-    if (funnelDto.quiz_answers) {
-      const quizAnswers = JSON.parse(funnelDto.quiz_answers);
+    if (funnelDto.quizAnswers) {
+      const quizAnswers = JSON.parse(funnelDto.quizAnswers);
       quizAnswers.forEach(answer => {
         fields.push({ id: answer.id, value: answer.value });
       });
@@ -470,8 +466,10 @@ export class FunnelService {
 
   async processVsl(funnelDto: FunnelDto) {
 
-    const response = await this.stickyService.findOrCreateProspect({ ...funnelDto }, funnelDto.cId.toString(), funnelDto.ipAddress);
-    return { ...response, ...funnelDto };
+    const response = await this.stickyService.findOrCreateProspect({ ...funnelDto },  funnelDto.ipAddress);
+    
+    //return { ...response, ...funnelDto };
+    
   }
   private getCardType(cardNumber: string): string {
     const patterns = {
@@ -517,13 +515,13 @@ export class FunnelService {
   private async processUpsells(orderId: string, funnelDto: FunnelDto): Promise<void> {
     const otherOffers = funnelDto.offers.split(',').slice(1);
     for (const offerInfo of otherOffers) {
-      const upsellOffers = await this.offersService.fetchOfferData(offerInfo, funnelDto.cId);
+      const upsellOffers = await this.offersService.fetchOfferData(offerInfo, 123);
       if (upsellOffers.length > 0) {
         const upsellData = {
           previousOrderId: parseInt(orderId),
-          shippingId: await this.getShippingId(funnelDto.cId),
+          //shippingId: await this.getShippingId(funnelDto.stickyCampaignId),
           ipAddress: funnelDto.ipAddress,
-          campaignId: funnelDto.cId,
+          //campaignId: funnelDto.stickyCampaignId,
           offers: upsellOffers,
           notes: 'SMC Purchased',
           custom_fields: this.getOrderCustomFields(funnelDto, 'no')

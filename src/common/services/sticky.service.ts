@@ -141,12 +141,13 @@ export class StickyService {
     }
   }
 
-  async findOrCreateProspect(postData: FunnelDto, cId: string, ip: string): Promise<any | null> {
+  async findOrCreateProspect(postData: FunnelDto, ip: string): Promise<any | null> {
 
-    const customerInfo = await this.getProspectInfo(postData.email);
+    //console.log("postData", postData)
+    //const customerInfo = await this.getProspectInfo(postData.email);
 
     const prospectData: ProspectData = {
-      campaignId: cId,
+      campaignId: '1',
       email: postData.email,
       firstName: postData.firstName || '',
       lastName: postData.lastName || '',
@@ -159,34 +160,33 @@ export class StickyService {
       ipAddress: ip || '127.0.0.1',
     };
 
-    if (postData.click_id) {
-      prospectData.click_id = postData.click_id;
+    if (postData.lastAttribution._ef_transaction_id) {
+      prospectData.click_id = postData.lastAttribution._ef_transaction_id;
     }
 
 
-    if (postData.AFID) {
-      prospectData.AFID = this.cleanString(postData.AFID);
-      prospectData.AFFID = this.cleanString(postData.AFID);
+    if (postData.afId) {
+      prospectData.AFID = this.cleanString(postData.afId);
+      prospectData.AFFID = this.cleanString(postData.afId);
     }
 
-    if (postData.SID) {
-      prospectData.SID = this.cleanString(postData.SID);
-      prospectData.C1 = this.cleanString(postData.SID);
-    }
-
-
-    if (postData.C2) {
-      prospectData.AFID = this.cleanString(postData.C2);
-      prospectData.C2 = this.cleanString(postData.C2);
-    }
-
-    if (postData.C3) {
-      prospectData.SID = this.cleanString(postData.C3);
-      prospectData.C3 = this.cleanString(postData.C3);
+    if (postData.sid) {
+      prospectData.SID = this.cleanString(postData.sid);
+      prospectData.C1 = this.cleanString(postData.sid);
     }
 
 
+    if (postData.c2) {
+      prospectData.AFID = this.cleanString(postData.c2);
+      prospectData.C2 = this.cleanString(postData.c2);
+    }
 
+    if (postData.c3) {
+      prospectData.SID = this.cleanString(postData.c3);
+      prospectData.C3 = this.cleanString(postData.c3);
+    }
+
+  
     const apiUrl = `${this.apiUrl}/api/v1/new_prospect`;
     const response: AxiosResponse<any> = await firstValueFrom(
       this.httpService.post<any>(apiUrl, prospectData, {

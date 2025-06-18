@@ -18,10 +18,11 @@ export class FunnelController {
     @Post()
     @Throttle({ default: { limit: 100, ttl: 60000 } })
     async create(@Body() funnelDto: FunnelDto, @InjectIP() ipAddress: string) {
-
+        
         funnelDto.ipAddress = ipAddress;
 
         return await this.funnelService.process(funnelDto);
+        
     }
 
 
