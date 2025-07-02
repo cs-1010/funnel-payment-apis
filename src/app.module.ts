@@ -7,7 +7,7 @@ import { CommandModule } from "nestjs-command"
 
 import { AppController } from "./app.controller"
 import { AppService } from "./app.service"
-import { FunnelModule } from "./funnel/funnel.module"
+import { ConversionModule } from "./conversion/conversion.module"
 import { QueueModule } from "./queue/queue.module"
 import { TestModule } from "./test/test.module"
 import { ExampleModule } from "./example/example.module"
@@ -31,7 +31,7 @@ import { ActiveCampaignModule } from "./active-campaign/active-campaign.module"
       }),
       inject: [ConfigService],
     }),
-    FunnelModule,
+    ConversionModule,
     QueueModule,
     TestModule,
     ExampleModule,

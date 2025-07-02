@@ -5,7 +5,7 @@ import { firstValueFrom } from 'rxjs';
 import { AxiosResponse } from 'axios';
 import * as https from 'https';
 import { DieException } from '../exceptions/die.exception';
-import { FunnelDto } from 'src/funnel/dto/funnel.dto';
+import { ConversionDto } from 'src/conversion/dto/conversion.dto';
 import { lastValueFrom } from 'rxjs';
 // Define interfaces for the data structures
 interface ProspectInfo {
@@ -92,7 +92,8 @@ export class StickyService {
           username: this.username,
           password: this.password
         },
-        httpsAgent: new (require('https').Agent)({ rejectUnauthorized: false })
+        httpsAgent: new (require('https').Agent)({ rejectUnauthorized: false }),
+        timeout: 30000, // 30 second timeout
       }));
 
       return response.data;
@@ -111,7 +112,8 @@ export class StickyService {
           username: this.username,
           password: this.password
         },
-        httpsAgent: new (require('https').Agent)({ rejectUnauthorized: false })
+        httpsAgent: new (require('https').Agent)({ rejectUnauthorized: false }),
+        timeout: 30000, // 30 second timeout
       }));
 
       return response.data;
@@ -131,7 +133,8 @@ export class StickyService {
           username: this.username,
           password: this.password
         },
-        httpsAgent: new (require('https').Agent)({ rejectUnauthorized: false })
+        httpsAgent: new (require('https').Agent)({ rejectUnauthorized: false }),
+        timeout: 30000, // 30 second timeout
       }));
 
       return response.data;
@@ -141,10 +144,8 @@ export class StickyService {
     }
   }
 
-  async findOrCreateProspect(postData: FunnelDto, ip: string): Promise<any | null> {
+  async findOrCreateProspect(postData: ConversionDto, ip: string): Promise<any | null> {
 
-    //console.log("postData", postData)
-    //const customerInfo = await this.getProspectInfo(postData.email);
 
     const prospectData: ProspectData = {
       campaignId: '1',
@@ -160,7 +161,7 @@ export class StickyService {
       ipAddress: ip || '127.0.0.1',
     };
 
-    if (postData.lastAttribution._ef_transaction_id) {
+    if (postData.lastAttribution && postData.lastAttribution._ef_transaction_id) {
       prospectData.click_id = postData.lastAttribution._ef_transaction_id;
     }
 
@@ -194,6 +195,7 @@ export class StickyService {
           username: this.username,
           password: this.password,
         },
+        timeout: 30000, // 30 second timeout
       })
     );
 
@@ -223,7 +225,8 @@ export class StickyService {
             username: this.username,
             password: this.password,
           },
-          httpsAgent: new https.Agent({ rejectUnauthorized: false })
+          httpsAgent: new https.Agent({ rejectUnauthorized: false }),
+          timeout: 30000, // 30 second timeout
         })
       );
 
@@ -248,7 +251,8 @@ export class StickyService {
           username: this.username,
           password: this.password
         },
-        httpsAgent: new (require('https').Agent)({ rejectUnauthorized: false })
+        httpsAgent: new (require('https').Agent)({ rejectUnauthorized: false }),
+        timeout: 30000, // 30 second timeout
       }));
       return response.data;
     } catch (error) {

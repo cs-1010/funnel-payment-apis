@@ -1,4 +1,4 @@
-import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+/*import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 
 @Schema({ _id: false })
@@ -50,7 +50,7 @@ class Page {
 }
 
 @Schema()
-export class Funnel extends Document {
+export class Conversion extends Document {
   @Prop({ required: true })
   cId: number;
 
@@ -67,5 +67,5 @@ export class Funnel extends Document {
   customerListId?: number;
 }
 
-export const FunnelSchema = SchemaFactory.createForClass(Funnel);
-
+export const ConversionSchema = SchemaFactory.createForClass(Conversion);
+*/

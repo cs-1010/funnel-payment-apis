@@ -3,8 +3,8 @@ import { ConfigService } from '@nestjs/config';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
-import { HttpExceptionFilter } from './common/filters/http-exception.filter';
-import { TransformInterceptor } from './common/interceptors/transform.interceptor';
+import { GlobalExceptionFilter } from './common/filters/exception.filter';
+import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 // import { QueueService } from './queue/queue.service';
 // import { CommandModule, CommandService } from 'nestjs-command';
 
@@ -14,7 +14,6 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   const configService = app.get(ConfigService);
-
 
 
   const port = configService.get<number>('port');
@@ -38,8 +37,8 @@ async function bootstrap() {
     credentials: true, // Allow credentials (cookies, headers, etc.)
   });
 
-  app.useGlobalFilters(new HttpExceptionFilter()) //This line was already correctly placed.  The error message is misleading.
-  app.useGlobalInterceptors(new TransformInterceptor())
+  app.useGlobalFilters(new GlobalExceptionFilter()) //This line was already correctly placed.  The error message is misleading.
+  app.useGlobalInterceptors(new ResponseInterceptor())
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

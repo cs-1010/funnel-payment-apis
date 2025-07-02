@@ -1,11 +1,11 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
-import { FunnelDto } from './dto/funnel.dto';
+import { ConversionDto } from './dto/conversion.dto';
 import { StickyService } from 'src/common/services/sticky.service';
 import { ResponseService } from 'src/common/services/response.service';
 //import { DieException } from 'src/common/exceptions/die.exception';
 import { QueueService } from 'src/queue/queue.service';
 import { InjectModel } from '@nestjs/mongoose';
-import { Funnel } from './schemas/funnel.schema';
+//import { Conversion } from './schemas/conversion.schema';
 import { Model } from 'mongoose';
 import { ActiveCampaignService } from 'src/active-campaign/active-campaign.service';
 import { OffersService } from 'src/offers/offers.service';
@@ -13,21 +13,21 @@ import { lastValueFrom } from 'rxjs';
 import { HttpService } from '@nestjs/axios';
 import { CustomResponse } from 'src/common/interfaces/custom-response.interface';
 import { JOBS } from 'src/common/Dto/job.dto';
-import { ConversionType } from './dto/funnel.dto';
+import { ConversionType } from './dto/conversion.dto';
 
 @Injectable()
-export class FunnelService {
-  private funnel: Funnel | null = null;
+export class ConversionService {
+  //private funnel: Conversion | null = null;
   private failureReasons: string[] = [];
 
-  private async getFunnelFromDatabase(fname: string, cId: number): Promise<void> {
-    this.funnel = await this.funnelModel.findOne({ fname, cId }).exec()
-    if (!this.funnel) {
-      throw new HttpException("Funnel not found", HttpStatus.NOT_FOUND)
-    }
-  }
+    //private async getFunnelFromDatabase(fname: string, cId: number): Promise<void> {
+    //  this.funnel = await this.funnelModel.findOne({ fname, cId }).exec()
+    //  if (!this.funnel) {
+    //    throw new HttpException("Funnel not found", HttpStatus.NOT_FOUND)
+    //  }
+    //}
 
-  async syncProspectToActiveCampaign(funnelDto: FunnelDto) {
+  /*async syncProspectToActiveCampaign(funnelDto: ConversionDto) {
     try {
       // Find the funnel document
       const funnel = await this.funnelModel.findOne({
@@ -66,12 +66,16 @@ export class FunnelService {
       throw error;
     }
   }
-
+*/
   private generateUniqueId(): string {
     return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
   }
   private readonly shippingId: number;
-  constructor(private readonly stickyService: StickyService, private readonly responseService: ResponseService, private readonly queueService: QueueService, @InjectModel(Funnel.name) private readonly funnelModel: Model<Funnel>,
+  constructor(private readonly stickyService: StickyService, 
+    private readonly responseService: ResponseService, 
+    private readonly queueService: QueueService, 
+   // @InjectModel(Conversion.name) 
+   // private readonly funnelModel: Model<Conversion>,
     private readonly activeCampaignService: ActiveCampaignService,
     private readonly offersService: OffersService,
     private readonly httpService: HttpService) {
@@ -89,32 +93,30 @@ export class FunnelService {
   }
 
 
-  async process(funnelDto: FunnelDto) {
+  async process(conversionDto: ConversionDto) {
 
     let response: any = null;
     // await this.getFunnelFromDatabase(funnelDto.fname, funnelDto.cId)
-    switch (funnelDto.conversionType) {
+    switch (conversionDto.conversionType) {
       case ConversionType.SIGNUP:
-        
-        response = await this.processVsl(funnelDto);
+        response = await this.processSignup(conversionDto);
         //const prospectId: string | null = response.prospectId ? response.prospectId : null;
-        return new CustomResponse(response, "Operation Completed Successfully", 200);
-        //await this.queueService.addJob(JOBS.STICKY_PROSPECT_CUSTOM_FIELDS, { ...funnelDto, prospectId: prospectId });
+        await this.queueService.addJob(JOBS.SIGNUP, { ...conversionDto, prospectId: response.prospectId });
         //await this.queueService.addJob(JOBS.AC_UPDATE_LIST, { ...funnelDto, prospectId: prospectId });
         break;
       case ConversionType.PURCHASE:
-        response = await this.processCheckout(funnelDto);
+        response = await this.processCheckout(conversionDto);
         break;
       case ConversionType.UPSELL:
-        response = await this.processUpsellPage(funnelDto);
+        response = await this.processUpsellPage(conversionDto);
         await this.queueService.addJob(JOBS.AC_TAGS, { ...response });
         break;
     }
 
-    return new CustomResponse(response, "Operation Completed Successfully", 200);
+    return response;
   }
 
-  private getNextUrl(ptype: string, response: any): string {
+  /*private getNextUrl(ptype: string, response: any): string {
     if (!this.funnel || !this.funnel.pages) {
       throw new Error("Funnel data not available")
     }
@@ -142,9 +144,9 @@ export class FunnelService {
 
     // Return the page URL or rurl if available
     return nextPage.rurl || nextPage.page
-  }
+  }*/
 
-  async processUpsellPage(funnelDto: FunnelDto): Promise<any> {
+  async processUpsellPage(funnelDto: ConversionDto): Promise<any> {
     const upsellOffers = [];
     if (funnelDto.offers.main) {
       upsellOffers.push({ ...funnelDto.offers.main });
@@ -178,7 +180,7 @@ export class FunnelService {
     throw new HttpException("No valid offers found", HttpStatus.BAD_REQUEST)
   }
 
-  async handleDeclineRedirectUpsell(upsellData: any, funnelDto: FunnelDto, declineProductId: any) {
+  async handleDeclineRedirectUpsell(upsellData: any, funnelDto: ConversionDto, declineProductId: any) {
     upsellData.campaignId = funnelDto.fallbackOffers.fallbackCampaignId;
     upsellData.offers = [
       funnelDto.fallbackOffers.offers[funnelDto.fallbackOffers.offers.findIndex(offer => offer.declinedProductId == declineProductId)].offer
@@ -188,7 +190,7 @@ export class FunnelService {
     return { ...response, isDeclineRedirect: 1 };
   }
 
-  async processCheckout(funnelDto: FunnelDto): Promise<any> {
+  async processCheckout(funnelDto: ConversionDto): Promise<any> {
     let offers: any = [];
     if (funnelDto.offers.main) {
       offers.push({ ...funnelDto.offers.main });
@@ -271,7 +273,7 @@ export class FunnelService {
     return data;
 
   }
-  async handleDeclineRedirectOnCheckout(funnelDto: FunnelDto, checkoutData: any, isNewCheckout: boolean) {
+  async handleDeclineRedirectOnCheckout(funnelDto: ConversionDto, checkoutData: any, isNewCheckout: boolean) {
     checkoutData.campaignId = funnelDto.fallbackOffers.fallbackCampaignId;
     checkoutData.offers[0] = { ...funnelDto.fallbackOffers.offer1 };
     let data = await this.stickyService.processNewOrder(checkoutData, isNewCheckout);
@@ -288,7 +290,7 @@ export class FunnelService {
 
   }
 
-  private processOtherFields(checkoutData: any, funnelDto: FunnelDto) {
+  private processOtherFields(checkoutData: any, funnelDto: ConversionDto) {
     //filling other info
     if (funnelDto.affId) {
       checkoutData.AFFID = funnelDto.affId;
@@ -387,7 +389,7 @@ export class FunnelService {
 
 
 
-  private getOrderCustomFields(funnelDto: FunnelDto, is_book: string = "no"): any[] {
+  private getOrderCustomFields(funnelDto: ConversionDto, is_book: string = "no"): any[] {
     const fields = [];
     const fieldMappings = [
       { key: 'ga4_client_id', id: 14 },
@@ -423,7 +425,7 @@ export class FunnelService {
     return fields;
   }
 
-  async addProspectCustomFields(funnelDto: FunnelDto) {
+  async addProspectCustomFields(funnelDto: ConversionDto) {
     const fields = [];
     const fieldMappings = [
       { key: 'rt_rotator_id', id: 21 },
@@ -464,12 +466,10 @@ export class FunnelService {
     }
   }
 
-  async processVsl(funnelDto: FunnelDto) {
+  async processSignup(conversionDto: ConversionDto) {
 
-    const response = await this.stickyService.findOrCreateProspect({ ...funnelDto },  funnelDto.ipAddress);
-    
-    //return { ...response, ...funnelDto };
-    
+    const response = await this.stickyService.findOrCreateProspect({ ...conversionDto },  conversionDto.ipAddress);
+    return response;
   }
   private getCardType(cardNumber: string): string {
     const patterns = {
@@ -512,7 +512,7 @@ export class FunnelService {
     return this.shippingId; // default free shipping
   }
 
-  private async processUpsells(orderId: string, funnelDto: FunnelDto): Promise<void> {
+  private async processUpsells(orderId: string, funnelDto: ConversionDto): Promise<void> {
     const otherOffers = funnelDto.offers.split(',').slice(1);
     for (const offerInfo of otherOffers) {
       const upsellOffers = await this.offersService.fetchOfferData(offerInfo, 123);

@@ -27,7 +27,7 @@ export enum ConversionType {
 export type Attribution = Record<string, any>; // Allows any key-value pairs
 export type DeviceInfo = Record<string, any>; // Allows any key-value pairs
 
-export class FunnelDto {
+export class ConversionDto {
   
   
   @IsNotEmpty()
@@ -165,25 +165,25 @@ export class FunnelDto {
   @IsString()
   quizAnswers?: string;
 
-  @ValidateIf((o) => o.ptype === ConversionType.PURCHASE)
+  @ValidateIf((o) => o.conversionType === ConversionType.PURCHASE)
   @IsNotEmpty({ message: 'Credit card number is required for checkout' })
   @IsString()
   @MaxLength(255)
   creditCardNumber?: string;
 
-  @ValidateIf((o) => o.convertionType === ConversionType.PURCHASE)
+  @ValidateIf((o) => o.conversionType === ConversionType.PURCHASE)
   @IsNotEmpty({ message: 'Credit card expiry month is required for checkout' })
   @IsString()
   @MaxLength(2)
   ccExpiryMonth?: string;
 
-  @ValidateIf((o) => o.convertionType === ConversionType.PURCHASE)
+  @ValidateIf((o) => o.conversionType === ConversionType.PURCHASE)
   @IsNotEmpty({ message: 'Credit card expiry year is required for checkout' })
   @IsString()
   @MaxLength(4)
   ccExpiryYear?: string;
 
-  @ValidateIf((o) => o.convertionType === ConversionType.PURCHASE)
+  @ValidateIf((o) => o.conversionType === ConversionType.PURCHASE)
   @IsNotEmpty({ message: 'Credit card cvc is required for checkout' })
   @IsString()
   @MaxLength(4)
@@ -214,7 +214,7 @@ export class FunnelDto {
   @MaxLength(2)
   billingCountry?: string;
 
-  @ValidateIf((o) => o.ptype === 'checkout')
+  @ValidateIf((o) => o.conversionType === ConversionType.PURCHASE || o.conversionType === ConversionType.UPSELL)
   @IsOptional()
   @IsObject()
   @Type(() => Object)
@@ -236,7 +236,7 @@ export class FunnelDto {
   @IsBoolean()
   isTrial?: boolean;
 
-  @ValidateIf((o) => ['upsell1', 'upsell2', 'upsell3'].includes(o.ptype))
+  @ValidateIf((o) => o.conversionType === ConversionType.UPSELL)
   @IsNotEmpty({ message: 'Previous order ID is required for upsells' })
   @IsString()
   preOrderId?: string;
