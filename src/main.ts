@@ -37,14 +37,12 @@ async function bootstrap() {
     //      credentials: true, // Allow credentials (cookies, headers, etc.)
     //    });
 
+  
   app.enableCors({
-    origin: (origin, callback) => {
-      callback(null, true); // Allow any origin
-    },
-    credentials: true, // Only works with dynamic origin setup
+    origin: ['http://localhost:5173', 'http://localhost:5174', 'https://creditsecrets.com'],
+    credentials: true,
   });
   
-
   app.useGlobalFilters(new GlobalExceptionFilter()) //This line was already correctly placed.  The error message is misleading.
   app.useGlobalInterceptors(new ResponseInterceptor())
   app.useGlobalPipes(
