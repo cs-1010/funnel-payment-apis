@@ -12,43 +12,13 @@ import { ResponseInterceptor } from './common/interceptors/response.interceptor'
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
-
-  const configService = app.get(ConfigService);
-
-
-  const port = configService.get<number>('port');
-
-  app.useGlobalPipes(
-    new ValidationPipe({
-      transform: true,
-      whitelist: true,
-      forbidNonWhitelisted: true,
-    }),
-  );
-  // Use the underlying Express instance to set 'trust proxy'
-  app.set('trust proxy', 1);
-
-  app.setGlobalPrefix("api");
-
-  //app.enableCors();
-
-   // app.enableCors({
-    //  origin: 'http://localhost:5173', // Replace with your frontend URL
-    //      credentials: true, // Allow credentials (cookies, headers, etc.)
-    //    });
-
-  
-  //app.enableCors({
-    //origin: ['http://localhost:5173', 'http://localhost:5174', 'https://creditsecrets.com'],
-    //credentials: true,
-  //});
-
+ 
   app.enableCors({
     origin: [
       'http://localhost:5174',
       'http://localhost:3000',
       'http://localhost:5173',
-      'https://yourdomain.com',
+      'https://creditsecrets.com',
       // Add other domains as needed
     ],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH', 'HEAD'],
@@ -67,7 +37,23 @@ async function bootstrap() {
     maxAge: 86400,
   });
   
-  
+  const configService = app.get(ConfigService);
+
+
+  const port = configService.get<number>('port');
+
+  app.useGlobalPipes(
+    new ValidationPipe({
+      transform: true,
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    }),
+  );
+  // Use the underlying Express instance to set 'trust proxy'
+  app.set('trust proxy', 1);
+
+  app.setGlobalPrefix("api");
+
   app.useGlobalFilters(new GlobalExceptionFilter()) //This line was already correctly placed.  The error message is misleading.
   app.useGlobalInterceptors(new ResponseInterceptor())
   app.useGlobalPipes(
