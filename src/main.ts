@@ -32,10 +32,18 @@ async function bootstrap() {
 
   //app.enableCors();
 
+   // app.enableCors({
+    //  origin: 'http://localhost:5173', // Replace with your frontend URL
+    //      credentials: true, // Allow credentials (cookies, headers, etc.)
+    //    });
+
   app.enableCors({
-    origin: 'http://localhost:5173', // Replace with your frontend URL
-    credentials: true, // Allow credentials (cookies, headers, etc.)
+    origin: (origin, callback) => {
+      callback(null, true); // Allow any origin
+    },
+    credentials: true, // Only works with dynamic origin setup
   });
+  
 
   app.useGlobalFilters(new GlobalExceptionFilter()) //This line was already correctly placed.  The error message is misleading.
   app.useGlobalInterceptors(new ResponseInterceptor())
