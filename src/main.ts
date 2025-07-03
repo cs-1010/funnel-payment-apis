@@ -48,7 +48,6 @@ async function bootstrap() {
   // const queueService = app.get(QueueService);
   // queueService.startProcessing();
 
-  // await app.listen(port);
   
   await app.listen(process.env.PORT ?? 4000);
 
