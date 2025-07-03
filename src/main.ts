@@ -44,21 +44,27 @@ async function bootstrap() {
   //});
 
   app.enableCors({
-    origin: '*', // Allow all origins
+    origin: [
+      'http://localhost:5174',
+      'http://localhost:3000',
+      'http://localhost:5173',
+      'https://yourdomain.com',
+      // Add other domains as needed
+    ],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH', 'HEAD'],
     allowedHeaders: [
       'Origin',
-      'X-Requested-With', 
-      'Content-Type',
+      'X-Requested-With',
+      'Content-Type', 
       'Accept',
       'Authorization',
       'Cache-Control',
       'Pragma'
     ],
-    credentials: false, // Set to false when using origin: '*'
+    credentials: true, // Can be true when using specific origins
     preflightContinue: false,
     optionsSuccessStatus: 204,
-    maxAge: 86400, // Cache preflight response for 24 hours
+    maxAge: 86400,
   });
   
   
