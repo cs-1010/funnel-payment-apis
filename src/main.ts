@@ -14,7 +14,27 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
  
   app.enableCors({
-    origin: '*', // Allow all origins
+    origin: [
+      'http://localhost:5174',
+      'http://localhost:3000',
+      'http://localhost:5173',
+      'https://creditsecrets.com',
+      // Add other domains as needed
+    ],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH', 'HEAD'],
+    allowedHeaders: [
+      'Origin',
+      'X-Requested-With',
+      'Content-Type', 
+      'Accept',
+      'Authorization',
+      'Cache-Control',
+      'Pragma'
+    ],
+    credentials: true, // Can be true when using specific origins
+    preflightContinue: false,
+    optionsSuccessStatus: 204,
+    maxAge: 86400,
   });
   
   //const configService = app.get(ConfigService);
@@ -48,6 +68,7 @@ async function bootstrap() {
   // const queueService = app.get(QueueService);
   // queueService.startProcessing();
 
+  // await app.listen(port);
   
   await app.listen(process.env.PORT ?? 4000);
 
