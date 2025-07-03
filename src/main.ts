@@ -38,10 +38,29 @@ async function bootstrap() {
     //    });
 
   
+  //app.enableCors({
+    //origin: ['http://localhost:5173', 'http://localhost:5174', 'https://creditsecrets.com'],
+    //credentials: true,
+  //});
+
   app.enableCors({
-    origin: ['http://localhost:5173', 'http://localhost:5174', 'https://creditsecrets.com'],
-    credentials: true,
+    origin: '*', // Allow all origins
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH', 'HEAD'],
+    allowedHeaders: [
+      'Origin',
+      'X-Requested-With', 
+      'Content-Type',
+      'Accept',
+      'Authorization',
+      'Cache-Control',
+      'Pragma'
+    ],
+    credentials: false, // Set to false when using origin: '*'
+    preflightContinue: false,
+    optionsSuccessStatus: 204,
+    maxAge: 86400, // Cache preflight response for 24 hours
   });
+  
   
   app.useGlobalFilters(new GlobalExceptionFilter()) //This line was already correctly placed.  The error message is misleading.
   app.useGlobalInterceptors(new ResponseInterceptor())
