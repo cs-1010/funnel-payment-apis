@@ -265,4 +265,8 @@ export class ConversionDto {
   @IsObject()
   @Type(() => Object)
   deviceInfo?: DeviceInfo;
+
+  @IsOptional()
+  @IsString()
+  reasonForBuying?:string
 }
