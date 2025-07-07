@@ -25,7 +25,7 @@ async function bootstrap() {
       'Cache-Control',
       'Pragma'
     ],
-    credentials: true, // Can be true when using specific origins
+    credentials: false, // Can be true when using specific origins
     preflightContinue: false,
     optionsSuccessStatus: 204,
     maxAge: 86400,
