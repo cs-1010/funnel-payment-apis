@@ -14,7 +14,7 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
  
   app.enableCors({
-    origin: '*',
+    origin: ['https://creditsecrets.com', 'https://www.creditsecrets.com'],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH', 'HEAD'],
     allowedHeaders: [
       'Origin',
@@ -25,7 +25,7 @@ async function bootstrap() {
       'Cache-Control',
       'Pragma'
     ],
-    credentials: false, // Can be true when using specific origins
+    credentials: true,
     preflightContinue: false,
     optionsSuccessStatus: 204,
     maxAge: 86400,
