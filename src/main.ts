@@ -14,7 +14,26 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
  
   app.enableCors({
-    origin: ['https://creditsecrets.com', 'https://www.creditsecrets.com'],
+    origin: function (origin, callback) {
+      // Allow requests with no origin (like mobile apps or Postman)
+      if (!origin) return callback(null, true);
+      
+      // List of allowed domains
+      const allowedOrigins = [
+        'https://creditsecrets.com',
+        'https://www.creditsecrets.com',
+        'http://localhost:5173',
+        'http://127.0.0.1:3001'
+      ];
+      
+      if (allowedOrigins.indexOf(origin) !== -1) {
+        callback(null, true);
+      } else {
+        // For development, you can log unknown origins
+        console.log('CORS blocked origin:', origin);
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH', 'HEAD'],
     allowedHeaders: [
       'Origin',
