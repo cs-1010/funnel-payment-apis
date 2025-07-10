@@ -207,7 +207,7 @@ export class ConversionService {
       checkoutData = {
         prospectId: funnelDto.prospectId,
         creditCardNumber: funnelDto.creditCardNumber.replace(/\s/g, ''),
-        expirationDate: `${funnelDto.ccExpiryMonth}${funnelDto.ccExpiryYear.substr(-2)}`,
+        expirationDate: `${funnelDto.creditCardExpiryMonth}${funnelDto.creditCardExpiryYear.substring(funnelDto.creditCardExpiryYear.length - 2)}`,
         CVV: 'OVERRIDE',
         creditCardType: this.getCardType(funnelDto.creditCardNumber),
         //shippingId: (await this.getShippingId(funnelDto.stickyCampaignId)).toString(),
@@ -222,7 +222,7 @@ export class ConversionService {
       isNewCheckout = true;
       checkoutData = {
         creditCardNumber: funnelDto.creditCardNumber.replace(/\s/g, ''),
-        expirationDate: `${funnelDto.ccExpiryMonth}${funnelDto.ccExpiryYear.substr(-2)}`,
+        expirationDate: `${funnelDto.creditCardExpiryMonth}${funnelDto.creditCardExpiryYear.substring(funnelDto.creditCardExpiryYear.length - 2)}`,
         CVV: 'OVERRIDE',
         creditCardType: this.getCardType(funnelDto.creditCardNumber),
         //shippingId: (await this.getShippingId(funnelDto.stickyCampaignId)).toString(),
