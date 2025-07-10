@@ -163,6 +163,13 @@ export class ConversionDto {
   quizAnswers?: string;
 
   @ValidateIf((o) => o.conversionType === ConversionType.PURCHASE)
+  @IsNotEmpty({ message: 'Name on card is required for checkout' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  cardHolderName?: string;
+
+  @ValidateIf((o) => o.conversionType === ConversionType.PURCHASE)
   @IsNotEmpty({ message: 'Credit card number is required for checkout' })
   @IsString()
   @MaxLength(255)
@@ -172,13 +179,31 @@ export class ConversionDto {
   @IsNotEmpty({ message: 'Credit card expiry month is required for checkout' })
   @IsString()
   @MaxLength(2)
-  ccExpiryMonth?: string;
+  creditCardExpiryMonth?: string;
 
   @ValidateIf((o) => o.conversionType === ConversionType.PURCHASE)
   @IsNotEmpty({ message: 'Credit card expiry year is required for checkout' })
   @IsString()
   @MaxLength(4)
-  ccExpiryYear?: string;
+  creditCardExpiryYear?: string;
+
+  
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(10)
+  isBump?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  mainOffer?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  bumpOffer?: string;
+
 
   @ValidateIf((o) => o.conversionType === ConversionType.PURCHASE)
   @IsNotEmpty({ message: 'Credit card cvc is required for checkout' })
@@ -208,7 +233,7 @@ export class ConversionDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(2)
+  @MaxLength(100)
   billingCountry?: string;
 
   @ValidateIf((o) => o.conversionType === ConversionType.PURCHASE || o.conversionType === ConversionType.UPSELL)
@@ -221,9 +246,9 @@ export class ConversionDto {
   @IsString()
   products?: string;
 
-  @IsOptional()
+  /*@IsOptional()
   @IsString()
-  utmCampaignId?: string;
+  utmCampaignId?: string;*/
 
   @IsOptional()
   @IsString()
