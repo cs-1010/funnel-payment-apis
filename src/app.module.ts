@@ -12,6 +12,7 @@ import { QueueModule } from "./queue/queue.module"
 import { TestModule } from "./test/test.module"
 import { ExampleModule } from "./example/example.module"
 import { ActiveCampaignModule } from "./active-campaign/active-campaign.module"
+import { GlobalExceptionFilter } from "./common/filters/exception.filter"
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { ActiveCampaignModule } from "./active-campaign/active-campaign.module"
   controllers: [AppController],
   providers: [
     AppService,
+    GlobalExceptionFilter,
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,

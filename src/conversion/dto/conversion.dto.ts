@@ -299,4 +299,8 @@ export class ConversionDto {
   @IsOptional()
   @IsString()
   reasonForBuying?:string
+
+  @IsOptional()
+  @IsString()
+  deviceType?:string 
 }
