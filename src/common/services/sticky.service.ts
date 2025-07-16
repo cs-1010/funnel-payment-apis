@@ -4,7 +4,6 @@ import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
 import { AxiosResponse } from 'axios';
 import * as https from 'https';
-import { DieException } from '../exceptions/die.exception';
 import { ConversionDto } from 'src/conversion/dto/conversion.dto';
 import { lastValueFrom } from 'rxjs';
 // Define interfaces for the data structures
@@ -40,15 +39,22 @@ interface ProspectData {
 }
 
 
-
-// Define an interface for the API response
-interface ApiResponse {
-  response_code: number;
-  prospectId: string;
-}
-
 @Injectable()
 export class StickyService {
+  
+  private readonly apiUrl: string;
+  private readonly username: string;
+  private readonly password: string;
+
+  constructor(
+    private readonly httpService: HttpService,
+    private readonly configService: ConfigService,
+  ) {
+    this.apiUrl = this.configService.get<string>('STICKY_API_URL') || '';
+    this.username = this.configService.get<string>('STICKY_USERNAME') || '';
+    this.password = this.configService.get<string>('STICKY_PASSWORD') || '';
+  }
+
   async updateProspect(prospectData: any): Promise<any> {
     const apiUrl = `${this.apiUrl}/api/v1/prospect_update`;
 
@@ -67,25 +73,13 @@ export class StickyService {
       throw new HttpException('Failed to update prospect', HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
-  private readonly apiUrl: string;
-  private readonly username: string;
-  private readonly password: string;
-
-  constructor(
-    private readonly httpService: HttpService,
-    private readonly configService: ConfigService,
-  ) {
-    this.apiUrl = this.configService.get<string>('STICKY_API_URL') || '';
-    this.username = this.configService.get<string>('STICKY_USERNAME') || '';
-    this.password = this.configService.get<string>('STICKY_PASSWORD') || '';
-  }
-  async processNewOrder(orderData: any, isNewCheckout: boolean = false): Promise<any> {
+  async processNewOrder(orderData: any): Promise<any> {
     let apiUrl = '';
-    if (isNewCheckout) {
+    //if (isNewCheckout) {
       apiUrl = `${this.apiUrl}/api/v1/new_order`;
-    } else {
-      apiUrl = `${this.apiUrl}/api/v1/new_order_with_prospect`;
-    }
+    //} else {
+    //  apiUrl = `${this.apiUrl}/api/v1/new_order_with_prospect`;
+    //}
     try {
       const response = await lastValueFrom(this.httpService.post(apiUrl, orderData, {
         auth: {
@@ -148,7 +142,7 @@ export class StickyService {
 
 
     const prospectData: ProspectData = {
-      campaignId: '1',
+      campaignId: postData.stickyCampaignId.toString(),
       email: postData.email,
       firstName: postData.firstName || '',
       lastName: postData.lastName || '',

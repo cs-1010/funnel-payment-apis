@@ -67,7 +67,8 @@ async function bootstrap() {
 
   app.setGlobalPrefix("api");
 
-  app.useGlobalFilters(new GlobalExceptionFilter()) //This line was already correctly placed.  The error message is misleading.
+  const globalExceptionFilter = app.get(GlobalExceptionFilter);
+  app.useGlobalFilters(globalExceptionFilter);
   app.useGlobalInterceptors(new ResponseInterceptor())
   app.useGlobalPipes(
     new ValidationPipe({

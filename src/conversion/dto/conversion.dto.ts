@@ -35,6 +35,7 @@ export class ConversionDto {
   @Type(() => Object)
   externalIds: Record<string, any>;
 
+  @ValidateIf((o) => o.conversionType !== ConversionType.UPSELL)
   @IsEmail({}, { message: 'Invalid email format' })
   @IsNotEmpty({
     message:
@@ -129,9 +130,6 @@ export class ConversionDto {
   @MaxLength(250, { each: true, message: 'Each tag must not exceed 50 characters' })
   tags?: string[];
 
-  @IsOptional()
-  @IsString()
-  frNodeId?: string;
 
   @IsOptional()
   @IsString()
@@ -152,7 +150,16 @@ export class ConversionDto {
 
   @IsOptional()
   @IsString()
-  frFunnelId?: string;
+  ftFunnelId?: string;
+
+  @IsOptional()
+  @IsString()
+  ftVisitorId?: string;
+
+  
+  @IsOptional()
+  @IsString()
+  ftNodeId?: string;
 
   @IsOptional()
   @IsString()
@@ -187,7 +194,9 @@ export class ConversionDto {
   @MaxLength(4)
   creditCardExpiryYear?: string;
 
-  
+  @IsNotEmpty()
+  @IsNumber()
+  stickyCampaignId: number;
 
   @IsOptional()
   @IsString()
@@ -238,9 +247,8 @@ export class ConversionDto {
 
   @ValidateIf((o) => o.conversionType === ConversionType.PURCHASE || o.conversionType === ConversionType.UPSELL)
   @IsOptional()
-  @IsObject()
   @Type(() => Object)
-  offers: Record<string, any>;
+  offers: Record<string, any> | any[];
 
   @IsOptional()
   @IsString()

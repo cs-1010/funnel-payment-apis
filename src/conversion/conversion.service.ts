@@ -2,71 +2,18 @@ import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { ConversionDto } from './dto/conversion.dto';
 import { StickyService } from 'src/common/services/sticky.service';
 import { ResponseService } from 'src/common/services/response.service';
-//import { DieException } from 'src/common/exceptions/die.exception';
 import { QueueService } from 'src/queue/queue.service';
-import { InjectModel } from '@nestjs/mongoose';
-//import { Conversion } from './schemas/conversion.schema';
-import { Model } from 'mongoose';
 import { ActiveCampaignService } from 'src/active-campaign/active-campaign.service';
 import { OffersService } from 'src/offers/offers.service';
 import { lastValueFrom } from 'rxjs';
 import { HttpService } from '@nestjs/axios';
-import { CustomResponse } from 'src/common/interfaces/custom-response.interface';
 import { JOBS } from 'src/common/Dto/job.dto';
 import { ConversionType } from './dto/conversion.dto';
 
 @Injectable()
 export class ConversionService {
-  //private funnel: Conversion | null = null;
+  
   private failureReasons: string[] = [];
-
-    //private async getFunnelFromDatabase(fname: string, cId: number): Promise<void> {
-    //  this.funnel = await this.funnelModel.findOne({ fname, cId }).exec()
-    //  if (!this.funnel) {
-    //    throw new HttpException("Funnel not found", HttpStatus.NOT_FOUND)
-    //  }
-    //}
-
-  /*async syncProspectToActiveCampaign(funnelDto: ConversionDto) {
-    try {
-      // Find the funnel document
-      const funnel = await this.funnelModel.findOne({
-        //cId: funnelDto.stickyCampaignId,
-        //fname: funnelDto.fname
-      });
-
-      if (!funnel) {
-        throw new Error('Funnel not found');
-      }
-
-      // Prepare data for ActiveCampaign
-      const data: any = {
-        email: funnelDto.email,
-        [`p[${funnel.prospectListId}]`]: funnel.prospectListId,
-        tags: funnelDto.tags ? funnelDto.tags.join(',') : '',
-        'field[47,0]': this.generateUniqueId()
-      };
-
-      // Handle name if provided
-      if (funnelDto.firstName) {
-        const nameTokens = funnelDto.firstName.split(' ');
-        data.firstName = nameTokens[0];
-        if (nameTokens.length > 1) {
-          data.lastName = nameTokens.slice(1).join(' ');
-        }
-      }
-
-      // Sync contact with ActiveCampaign
-      const info = await this.activeCampaignService.syncContact(data);
-      console.log('Contact synced with ActiveCampaign:', info);
-
-      return info;
-    } catch (error) {
-      console.error('Error syncing prospect to ActiveCampaign:', error);
-      throw error;
-    }
-  }
-*/
   private generateUniqueId(): string {
     return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
   }
@@ -74,8 +21,7 @@ export class ConversionService {
   constructor(private readonly stickyService: StickyService, 
     private readonly responseService: ResponseService, 
     private readonly queueService: QueueService, 
-   // @InjectModel(Conversion.name) 
-   // private readonly funnelModel: Model<Conversion>,
+   
     private readonly activeCampaignService: ActiveCampaignService,
     private readonly offersService: OffersService,
     private readonly httpService: HttpService) {
@@ -100,221 +46,461 @@ export class ConversionService {
     switch (conversionDto.conversionType) {
       case ConversionType.SIGNUP:
         response = await this.processSignup(conversionDto);
-        //const prospectId: string | null = response.prospectId ? response.prospectId : null;
-        await this.queueService.addJob(JOBS.SIGNUP, { ...conversionDto, prospectId: response.prospectId });
-        //await this.queueService.addJob(JOBS.AC_UPDATE_LIST, { ...funnelDto, prospectId: prospectId });
         break;
       case ConversionType.PURCHASE:
+        
         response = await this.processCheckout(conversionDto);
         break;
       case ConversionType.UPSELL:
-        response = await this.processUpsellPage(conversionDto);
-        await this.queueService.addJob(JOBS.AC_TAGS, { ...response });
+        
+        response = await this.processUpsell(conversionDto);
+       
         break;
     }
 
     return response;
   }
 
-  /*private getNextUrl(ptype: string, response: any): string {
-    if (!this.funnel || !this.funnel.pages) {
-      throw new Error("Funnel data not available")
+  
+  async processSignup(conversionDto: ConversionDto) {
+
+    const response = await this.stickyService.findOrCreateProspect({ ...conversionDto },  conversionDto.ipAddress);
+    
+    if (response.prospectId) {
+      this.queueService.addJob(JOBS.SIGNUP, { ...conversionDto, prospectId: response.prospectId });
     }
-
-    const currentPageIndex = this.funnel.pages.findIndex((page) => page.type === ptype)
-    if (currentPageIndex === -1) {
-      throw new Error(`Page type ${ptype} not found in funnel`)
-    }
-
-    let nextPage: any = null
-
-    // Check if there's an 'onbuy' property for the current page
-    if (this.funnel.pages[currentPageIndex].onbuy) {
-      nextPage = this.funnel.pages.find((page) => page.type === this.funnel.pages[currentPageIndex].onbuy)
-    }
-
-    // If no 'onbuy' or 'onbuy' page not found, get the next page in sequence
-    if (!nextPage && currentPageIndex < this.funnel.pages.length - 1) {
-      nextPage = this.funnel.pages[currentPageIndex + 1]
-    }
-
-    if (!nextPage) {
-      return null;
-    }
-
-    // Return the page URL or rurl if available
-    return nextPage.rurl || nextPage.page
-  }*/
-
-  async processUpsellPage(funnelDto: ConversionDto): Promise<any> {
-    const upsellOffers = [];
-    if (funnelDto.offers.main) {
-      upsellOffers.push({ ...funnelDto.offers.main });
-    }
-
-    if (upsellOffers.length > 0) {
-      const upsellData = {
-        previousOrderId: funnelDto.preOrderId,
-       // shippingId: await this.getShippingId(funnelDto.stickyCampaignId),
-        ipAddress: funnelDto.ipAddress,
-       // campaignId: funnelDto.stickyCampaignId,
-        offers: upsellOffers,
-        notes: "Upsell Purchased",
-        custom_fields: this.getOrderCustomFields(funnelDto, "no"),
-      }
-
-      let response = await this.stickyService.processNewUpsell(upsellData)
-
-      if (response.error_message
-        && this.failureReasons.findIndex(reason => reason.toLowerCase() == response.error_message.toLowerCase()) !== -1
-        && funnelDto.fallbackOffers
-        && funnelDto.fallbackOffers.fallbackCampaignId
-        && funnelDto.fallbackOffers.offers
-        && funnelDto.fallbackOffers.offers.findIndex(offer => offer.declinedProductId == upsellOffers[0].product_id) !== -1
-      ) {
-        response = await this.handleDeclineRedirectUpsell(upsellData, funnelDto, upsellOffers[0].product_id);
-      }
-      return { ...response, ...funnelDto };
-    }
-
-    throw new HttpException("No valid offers found", HttpStatus.BAD_REQUEST)
+    
+    return response;
   }
+  async processCheckout(conversionDto: ConversionDto): Promise<any> {
 
-  async handleDeclineRedirectUpsell(upsellData: any, funnelDto: ConversionDto, declineProductId: any) {
-    upsellData.campaignId = funnelDto.fallbackOffers.fallbackCampaignId;
-    upsellData.offers = [
-      funnelDto.fallbackOffers.offers[funnelDto.fallbackOffers.offers.findIndex(offer => offer.declinedProductId == declineProductId)].offer
-    ];
+    const offers = this.normalizeOffers(conversionDto.offers);
+    
+    // Check if offers are empty
+    if (!offers || offers.length === 0) {
+      this.queueService.addJob(JOBS.ERROR, {"errorMessage" : "Missing offers", "funnelId" : conversionDto?.ftFunnelId, "nodeId" : conversionDto?.ftNodeId});
+      return { error_message: 'Payment failed, please contact support', error_found:"1" };    
+    }
+   
+    // Filter offers based on mainOffer if provided
+    let filteredOffers = [];
+    let campaignId = null;
+    
+    if (conversionDto.mainOffer) {
+      
+      try {
+        const selectedMainOffer = JSON.parse(Buffer.from(conversionDto.mainOffer, 'base64').toString('utf8'));
+        const mainOfferId = selectedMainOffer.offerId.toString(); // Convert to string for comparison
+        let bumpOfferId = null;
+        
+       
+        const mainOfferObj = offers.find(offer => 
+          offer.offerId === mainOfferId && offer.type === "MAIN"
+        );
+        campaignId = mainOfferObj.campaignId;
 
-    let response = await this.stickyService.processNewUpsell(upsellData)
-    return { ...response, isDeclineRedirect: 1 };
-  }
+        filteredOffers.push(mainOfferObj);
+        // Only parse bumpOffer if it exists
+        if (conversionDto.bumpOffer) {
+          const selectedBumpOffer = JSON.parse(Buffer.from(conversionDto.bumpOffer, 'base64').toString('utf8'));
+          bumpOfferId = selectedBumpOffer.offerId.toString(); 
+          const bumpOfferObj = offers.find(offer => 
+            offer.offerId === bumpOfferId && offer.type === "BUMP"
+          );
+          filteredOffers.push(bumpOfferObj);
+        }
 
-  async processCheckout(funnelDto: ConversionDto): Promise<any> {
-    let offers: any = [];
-    if (funnelDto.offers.main) {
-      offers.push({ ...funnelDto.offers.main });
+      } catch (error) {
+        console.error('Error parsing mainOffer:', error);
+        // Fallback to original offers if parsing fails
+      }
+    }
+    
+    if (!filteredOffers || filteredOffers.length === 0) {
+      //throw new HttpException("Invalid offers", HttpStatus.BAD_REQUEST);
+      this.queueService.addJob(JOBS.ERROR, {"errorMessage" : "Invalid offers", "funnelId" : conversionDto?.ftFunnelId, "nodeId" : conversionDto?.ftNodeId});
+      return { error_message: 'Payment failed, please contact support', error_found:"1" };
+    }
+ 
+    // Transform offers to the required format for checkout
+    const transformedOffers = this.transformOffersForCheckout(filteredOffers);
+    
+    // Extract first and last name from cardHolderName
+    const { firstName, lastName } = this.extractNamesFromCardHolder(conversionDto.cardHolderName);
+    
+    // Build base checkout data
+    const checkoutData = {
+      creditCardNumber: conversionDto.creditCardNumber.replace(/\s/g, ''),
+      expirationDate: `${conversionDto.creditCardExpiryMonth}${conversionDto.creditCardExpiryYear.substring(conversionDto.creditCardExpiryYear.length - 2)}`,
+      CVV: 'OVERRIDE',
+      creditCardType: this.getCardType(conversionDto.creditCardNumber),
+      tranType: 'Sale',
+      shippingId:await this.getShippingId(campaignId),
+      ipAddress: conversionDto.ipAddress,
+      offers: transformedOffers,
+      custom_fields: this.getOrderCustomFields(conversionDto, 'yes'),
+      shippingCountry: "US",
+      email: conversionDto.email,
+      campaignId: campaignId,
+      ...(firstName && { firstName }),
+      ...(lastName && { lastName }),
+      
+    };
+
+    
+        // Process additional fields and checkout
+    const processedData = this.processOtherFields(checkoutData, conversionDto);
+
+    let response = await this.stickyService.processNewOrder(processedData);
+
+    // Handle fallback offers if main offer fails
+    let data = { ...response };
+    if (this.shouldHandleFallback(data)) {
+      data = await this.handleFallbackCheckoutOffers(conversionDto, processedData, filteredOffers);
     }
 
-    if (funnelDto.offers.bump) {
-      offers.push({ ...funnelDto.offers.bump })
-    }
-
-    let checkoutData: any = {};
-    let isNewCheckout: boolean = false;
-    if (funnelDto.prospectId) {
-      // Prepare checkout data
-      checkoutData = {
-        prospectId: funnelDto.prospectId,
-        creditCardNumber: funnelDto.creditCardNumber.replace(/\s/g, ''),
-        expirationDate: `${funnelDto.creditCardExpiryMonth}${funnelDto.creditCardExpiryYear.substring(funnelDto.creditCardExpiryYear.length - 2)}`,
-        CVV: 'OVERRIDE',
-        creditCardType: this.getCardType(funnelDto.creditCardNumber),
-        //shippingId: (await this.getShippingId(funnelDto.stickyCampaignId)).toString(),
-        tranType: 'Sale',
-        ipAddress: funnelDto.ipAddress,
-        //campaignId: funnelDto.stickyCampaignId,
-        offers: offers,
-        custom_fields: this.getOrderCustomFields(funnelDto, 'yes')
-      };
-
+    // Queue jobs based on result
+    const queueData = this.prepareQueueData(data, conversionDto, checkoutData);
+    
+    if (response.resp_msg === "Approved") {
+      this.queueService.addJob(JOBS.SALE, queueData);
     } else {
-      isNewCheckout = true;
-      checkoutData = {
-        creditCardNumber: funnelDto.creditCardNumber.replace(/\s/g, ''),
-        expirationDate: `${funnelDto.creditCardExpiryMonth}${funnelDto.creditCardExpiryYear.substring(funnelDto.creditCardExpiryYear.length - 2)}`,
-        CVV: 'OVERRIDE',
-        creditCardType: this.getCardType(funnelDto.creditCardNumber),
-        //shippingId: (await this.getShippingId(funnelDto.stickyCampaignId)).toString(),
-        tranType: 'Sale',
-        ipAddress: funnelDto.ipAddress,
-        //campaignId: funnelDto.stickyCampaignId,
-        offers: offers,
-        custom_fields: this.getOrderCustomFields(funnelDto, 'yes'),
-        shippingCountry: "US"
+      // Queue failed transactions
+      this.queueService.addJob(JOBS.FAILED_SALE, queueData);
+    }
+
+    return {
+      ...data,
+      conversionType: conversionDto.conversionType,
+      firstName: checkoutData.firstName,
+      lastName: checkoutData.lastName
+    };
+  }
+
+
+  async processUpsell(conversionDto: ConversionDto): Promise<any> {
+
+    const offers = this.normalizeOffers(conversionDto.offers);
+    
+    // Check if offers are empty
+    if (!offers || offers.length === 0) {
+      this.queueService.addJob(JOBS.ERROR, {"errorMessage" : "Missing offers", "funnelId" : conversionDto?.ftFunnelId, "nodeId" : conversionDto?.ftNodeId});
+      return { error_message: 'Payment failed, please contact support', error_found:"1" };    
+    }
+   
+    // Filter offers based on mainOffer if provided
+    let filteredOffers = [];
+    let campaignId = null;
+    
+    if (conversionDto.mainOffer) {
+      
+      try {
+        const selectedMainOffer = JSON.parse(Buffer.from(conversionDto.mainOffer, 'base64').toString('utf8'));
+        const mainOfferId = selectedMainOffer.offerId.toString(); // Convert to string for comparison
+         
+        const mainOfferObj = offers.find(offer => 
+          offer.offerId === mainOfferId && offer.type === "MAIN"
+        );
+        campaignId = mainOfferObj.campaignId;
+        filteredOffers.push(mainOfferObj);
+      
+      } catch (error) {
+        console.error('Error parsing mainOffer:', error);
+        
+      }
+    }
+
+    if (!filteredOffers || filteredOffers.length === 0) {
+      //throw new HttpException("Invalid offers", HttpStatus.BAD_REQUEST);
+      this.queueService.addJob(JOBS.ERROR, {"errorMessage" : "Invalid offers", "funnelId" : conversionDto?.ftFunnelId, "nodeId" : conversionDto?.ftNodeId});
+      return { error_message: 'Payment failed, please contact support', error_found:"1" };
+    }
+
+    
+    const transformedOffers = this.transformOffersForCheckout(filteredOffers);
+   
+    
+      const upsellData = {
+        previousOrderId: conversionDto.preOrderId,
+        shippingId: await this.getShippingId(campaignId),
+        ipAddress: conversionDto.ipAddress,
+        campaignId: campaignId,
+        offers: transformedOffers,
+        notes: "Upsell Purchased",
+        //custom_fields: this.getOrderCustomFields(conversionDto, "no"),
+      }
+
+      const processedData = this.processOtherFields(upsellData, conversionDto);
+      
+      let response = await this.stickyService.processNewUpsell(processedData)
+
+      let data = { ...response };
+      if (this.shouldHandleFallback(data)) {
+        data = await this.handleFallbackUpsellOffers(conversionDto, processedData, filteredOffers);
+      }
+  
+      // Queue jobs based on result
+      const queueData = this.prepareQueueData(data, conversionDto, processedData);
+
+       
+      if (data.resp_msg === "Approved") {
+        this.queueService.addJob(JOBS.UPSELL_SALE, queueData);
+      } else {
+        // Queue failed transactions
+        this.queueService.addJob(JOBS.FAILED_SALE, queueData);
+      }
+  
+      return queueData;
+    
+    //throw new HttpException("No valid offers found", HttpStatus.BAD_REQUEST)
+
+  }
+ 
+
+  private normalizeOffers(offers: any): any[] {
+    if (Array.isArray(offers)) {
+      return [...offers];
+    } else if (offers && typeof offers === 'object') {
+      const normalizedOffers = [];
+      if (offers.main) {
+        normalizedOffers.push({ ...offers.main });
+      }
+      if (offers.bump) {
+        normalizedOffers.push({ ...offers.bump });
+      }
+      return normalizedOffers;
+    }
+    return [];
+  }
+
+
+  private shouldHandleFallback(data: any): boolean {
+    return data.error_message
+      && this.failureReasons.findIndex(reason => reason.toLowerCase() === data.error_message.toLowerCase()) !== -1;
+  }
+
+  private async handleFallbackCheckoutOffers(convertionlDto: ConversionDto, checkoutData: any, allOffers: any[]): Promise<any> {
+    // Get fallback offers sorted by priority
+    const fallbackOffers = allOffers
+      .filter(offer => offer.type === "FALLBACK")
+      .sort((a, b) => (a.priority || 999) - (b.priority || 999));
+
+    // Get bump offers
+    const bumpOffers = allOffers.filter(offer => offer.type === "BUMP");
+
+    // Try each fallback offer with bump offers
+    for (const fallbackOffer of fallbackOffers) {
+      try {
+        // Create new checkout data with fallback offer + bump offers
+
+        checkoutData.campaignId = fallbackOffer.campaignId;
+        const fallbackCheckoutData = {
+          ...checkoutData,
+          offers: this.transformOffersForCheckout([fallbackOffer, ...bumpOffers])
+        };
+
+        const response = await this.stickyService.processNewOrder(fallbackCheckoutData);
+        
+        if (response.resp_msg === "Approved") {
+         
+          return { ...response, isFallback: true, fallbackPriority: fallbackOffer.priority };
+        }
+        
+      } catch (error) {
+        console.error(`Error processing fallback offer with priority ${fallbackOffer.priority}:`, error);
+        continue; // Try next fallback offer
+      }
+    }
+
+    // If all fallback offers failed, return the last error
+   // console.log('All fallback offers failed');
+    const failedData = { error_message: 'All fallback offers failed', isFallback: true };
+   
+    return failedData;
+  }
+
+  private async handleFallbackUpsellOffers(convertionlDto: ConversionDto, checkoutData: any, allOffers: any[]): Promise<any> {
+    // Get fallback offers sorted by priority
+    const fallbackOffers = allOffers
+      .filter(offer => offer.type === "FALLBACK")
+      .sort((a, b) => (a.priority || 999) - (b.priority || 999));
+ 
+    // Try each fallback offer with bump offers
+    for (const fallbackOffer of fallbackOffers) {
+      try {
+        // Create new checkout data with fallback offer + bump offers
+
+        checkoutData.campaignId = fallbackOffer.campaignId;
+        const fallbackCheckoutData = {
+          ...checkoutData,
+          offers: this.transformOffersForCheckout([fallbackOffer])
+        };
+
+        const response = await this.stickyService.processNewUpsell(fallbackCheckoutData);
+        
+        if (response.resp_msg === "Approved") {
+         
+          return { ...response, isFallback: true, fallbackPriority: fallbackOffer.priority };
+        }
+        
+      } catch (error) {
+        console.error(`Error processing fallback offer with priority ${fallbackOffer.priority}:`, error);
+        continue; // Try next fallback offer
+      }
+    }
+
+    // If all fallback offers failed, return the last error
+   // console.log('All fallback offers failed');
+    const failedData = { error_message: 'All fallback offers failed', isFallback: true };
+   
+    return failedData;
+  }
+
+  private transformOffersForCheckout(offers: any[]): any[] {
+    return offers.map(offer => {
+
+      const transformedOffer: any = {
+        offer_id: offer.offerId,
+        product_id: offer.productId,
+        billing_model_id: offer.billingModelId,
+        quantity: offer.quantity || "1"
       };
-      if (funnelDto.firstName) {
-        checkoutData.firstName = funnelDto.firstName;
+
+      // Add step_num if present
+      if (offer.stepNum) {
+        transformedOffer.step_num = offer.stepNum.toString();
       }
-      if (funnelDto.lastName) {
-        checkoutData.lastName = funnelDto.lastName;
+
+      // Add trial information if it's a trial offer
+      if (offer.isTrial) {
+        transformedOffer.trial = {
+          product_id: offer.productId
+        };
       }
-      checkoutData.email = funnelDto.email;
-    }
 
-
-
-    checkoutData = this.processOtherFields(checkoutData, funnelDto);
-
-
-
-    // Process checkout
-    let response = await this.stickyService.processNewOrder(checkoutData, isNewCheckout);
-
-
-    let data = { ...response, ...funnelDto };
-    if (data.error_message
-      && this.failureReasons.findIndex(reason => reason.toLowerCase() === data.error_message.toLowerCase()) !== -1
-      && funnelDto.fallbackOffers
-      && funnelDto.fallbackOffers.fallbackCampaignId
-      && funnelDto.fallbackOffers.offer1
-    ) {
-      //handling decline redirect
-      response = await this.handleDeclineRedirectOnCheckout(funnelDto, checkoutData, isNewCheckout);
-      data = { ...response, ...funnelDto };
-    }
-
-
-    if (response.customerId) {
-      this.queueService.addJob(JOBS.STICKY_ORDER_CUSTOM_FIELDS, data);
-      this.queueService.addJob(JOBS.AC_TAGS, data);
-    }
-
-    return data;
-
-  }
-  async handleDeclineRedirectOnCheckout(funnelDto: ConversionDto, checkoutData: any, isNewCheckout: boolean) {
-    checkoutData.campaignId = funnelDto.fallbackOffers.fallbackCampaignId;
-    checkoutData.offers[0] = { ...funnelDto.fallbackOffers.offer1 };
-    let data = await this.stickyService.processNewOrder(checkoutData, isNewCheckout);
-
-    if (data.error_message
-      && this.failureReasons.findIndex(reason => reason.toLowerCase() === data.error_message.toLowerCase())
-      && funnelDto.fallbackOffers.offer2
-    ) {
-      checkoutData.offers[0] = { ...funnelDto.fallbackOffers.offer2 };
-      data = await this.stickyService.processNewOrder(checkoutData, isNewCheckout);
-
-    }
-    return { ...data, ...checkoutData, isDeclineRedirect: 1 };
-
+      return transformedOffer;
+    });
   }
 
-  private processOtherFields(checkoutData: any, funnelDto: ConversionDto) {
+  private extractNamesFromCardHolder(cardHolderName: string): { firstName: string; lastName: string } {
+    if (!cardHolderName) {
+      return { firstName: '', lastName: '' };
+    }
+
+    // Split by spaces and trim whitespace
+    const nameParts = cardHolderName.trim().split(/\s+/);
+    
+    if (nameParts.length === 1) {
+      // Only one name provided
+      return { firstName: nameParts[0], lastName: '' };
+    } else if (nameParts.length >= 2) {
+      // First part is firstName, rest is lastName
+      const firstName = nameParts[0];
+      const lastName = nameParts.slice(1).join(' ');
+      return { firstName, lastName };
+    }
+
+    return { firstName: '', lastName: '' };
+  }
+
+  private prepareQueueData(responseData: any, conversionDto: ConversionDto, checkoutData: any): any {
+    // Create a sanitized version of funnelDto without sensitive data
+    const sanitizedFunnelDto = { ...conversionDto };
+    
+    // Mask credit card number to show only last 4 digits
+    if (sanitizedFunnelDto.creditCardNumber) {
+      const cardNumber = sanitizedFunnelDto.creditCardNumber.replace(/\s/g, '');
+      sanitizedFunnelDto.creditCardNumber = cardNumber.length >= 4 
+        ? `****${cardNumber.slice(-4)}` 
+        : '****';
+    }
+    
+    // Remove sensitive credit card fields
+    delete sanitizedFunnelDto.creditCardExpiryMonth;
+    delete sanitizedFunnelDto.creditCardExpiryYear;
+    delete sanitizedFunnelDto.cvc;
+    
+    // Create a sanitized version of checkoutData without sensitive data
+    const sanitizedCheckoutData = { ...checkoutData };
+    
+    // Mask credit card number in checkout data
+    if (sanitizedCheckoutData.creditCardNumber) {
+      const cardNumber = sanitizedCheckoutData.creditCardNumber.replace(/\s/g, '');
+      sanitizedCheckoutData.creditCardNumber = cardNumber.length >= 4 
+        ? `****${cardNumber.slice(-4)}` 
+        : '****';
+    }
+    
+    // Remove sensitive fields from checkout data
+    delete sanitizedCheckoutData.creditCardExpiryMonth;
+    delete sanitizedCheckoutData.creditCardExpiryYear;
+    delete sanitizedCheckoutData.cvc;
+    
+    return {
+      ...responseData,
+      postedPayload: sanitizedFunnelDto,
+      processedPayload: sanitizedCheckoutData,
+      timestamp: new Date().toISOString()
+    };
+  }
+  
+ 
+  private processOtherFields(checkoutData: any, conversionDto: ConversionDto) {
     //filling other info
-    if (funnelDto.affId) {
-      checkoutData.AFFID = funnelDto.affId;
+    if (conversionDto.lastAttribution.campaign_id) {
+      checkoutData.AFFID = conversionDto.lastAttribution.campaign_id;
     }
 
-    if (funnelDto.afId) {
-      checkoutData.AFID = funnelDto.afId;
+    if (conversionDto.lastAttribution.campaign_id) {
+      checkoutData.AFID = conversionDto.lastAttribution.campaign_id;
     }
 
-    if (funnelDto.c1) {
-      checkoutData.C1 = funnelDto.c1;
+    if (conversionDto.lastAttribution.h_ad_id) {
+      checkoutData.SID = conversionDto.lastAttribution.h_ad_id;
     }
 
-    if (funnelDto.c2) {
-      checkoutData.C2 = funnelDto.c2;
+    if (conversionDto.lastAttribution.h_ad_id) {
+      checkoutData.C1 = conversionDto.lastAttribution.h_ad_id;
     }
 
-    if (funnelDto.sid) {
-      checkoutData.SID = funnelDto.sid;
+    if (conversionDto.c2) {
+      checkoutData.C2 = conversionDto.c2;
+    }    
+
+    if (conversionDto.c3) {
+      checkoutData.C3 = conversionDto.c3;
     }
 
-    if (funnelDto.c3) {
-      checkoutData.C3 = funnelDto.c3;
+    // UTM Parameters
+    if (conversionDto.lastAttribution.utm_source) {
+      checkoutData.utm_source = conversionDto.lastAttribution.utm_source;
     }
+
+    if (conversionDto.lastAttribution.utm_medium) {
+      checkoutData.utm_medium = conversionDto.lastAttribution.utm_medium;
+    }
+
+    if (conversionDto.lastAttribution.utm_campaign) {
+      checkoutData.utm_campaign = conversionDto.lastAttribution.utm_campaign;
+    }
+
+    if (conversionDto.lastAttribution.utm_content) {
+      checkoutData.utm_content = conversionDto.lastAttribution.utm_content;
+    }
+
+    if (conversionDto.lastAttribution.utm_term) {
+      checkoutData.utm_term = conversionDto.lastAttribution.utm_term;
+    }
+
+    // Device Category
+    if (conversionDto.deviceInfo.type) {
+      checkoutData.device_category = conversionDto.deviceInfo.type;
+    }
+
+    if (conversionDto.lastAttribution.utm_term) {
+      checkoutData.click_id = conversionDto.lastAttribution.utm_term;
+    }
+
     return checkoutData;
   }
 
@@ -466,11 +652,8 @@ export class ConversionService {
     }
   }
 
-  async processSignup(conversionDto: ConversionDto) {
+  
 
-    const response = await this.stickyService.findOrCreateProspect({ ...conversionDto },  conversionDto.ipAddress);
-    return response;
-  }
   private getCardType(cardNumber: string): string {
     const patterns = {
       visa: /^4\d{12}(?:\d{3})?$/,
@@ -488,8 +671,8 @@ export class ConversionService {
     return "unknown";
   }
 
-  private async getShippingId(cId: number, freeShipping?: number): Promise<number> {
-    if (freeShipping === 1) {
+  private async getShippingId(cId: number, freeShipping: boolean = true): Promise<number> {
+    if (freeShipping === true) {
       return this.shippingId;
     }
 
@@ -512,23 +695,5 @@ export class ConversionService {
     return this.shippingId; // default free shipping
   }
 
-  private async processUpsells(orderId: string, funnelDto: ConversionDto): Promise<void> {
-    const otherOffers = funnelDto.offers.split(',').slice(1);
-    for (const offerInfo of otherOffers) {
-      const upsellOffers = await this.offersService.fetchOfferData(offerInfo, 123);
-      if (upsellOffers.length > 0) {
-        const upsellData = {
-          previousOrderId: parseInt(orderId),
-          //shippingId: await this.getShippingId(funnelDto.stickyCampaignId),
-          ipAddress: funnelDto.ipAddress,
-          //campaignId: funnelDto.stickyCampaignId,
-          offers: upsellOffers,
-          notes: 'SMC Purchased',
-          custom_fields: this.getOrderCustomFields(funnelDto, 'no')
-        };
-
-        await this.stickyService.processNewUpsell(upsellData);
-      }
-    }
-  }
+  
 }

@@ -26,7 +26,7 @@ export class Job {
   result: any
 
   @Prop({
-    enum: ["AC_TAGS", "STICKY_ORDER_CUSTOM_FIELDS", "STICKY_PROSPECT_CUSTOM_FIELDS", "AC_UPDATE_LIST", "PAGE_VISIT", "PAGE_CLICK","SIGNUP","SALE"],
+    enum: ["PAGE_VISIT", "PAGE_CLICK", "SIGNUP", "SALE", "UPSELL_SALE", "FAILED_SALE", "FAILED_UPSELL_SALE","ERROR"],
     required: true,
   })
   type: string

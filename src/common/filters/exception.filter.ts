@@ -1,9 +1,14 @@
-import { ExceptionFilter, Catch, ArgumentsHost, HttpException } from '@nestjs/common';
+import { ExceptionFilter, Catch, ArgumentsHost, HttpException, Injectable } from '@nestjs/common';
 import { Response } from 'express';
 import { MongoError } from 'mongodb';
+import { QueueService } from 'src/queue/queue.service'
+import { JOBS } from 'src/common/Dto/job.dto'
 
+@Injectable()
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
+  constructor(private readonly queueService: QueueService) {}
+
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
@@ -30,7 +35,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       }
       errorDetails = 'MongoDB Error';
     }
-
+    this.queueService.addJob(JOBS.ERROR, {"errorMessage" : errorMessage, errorDetails : errorDetails });
     response.status(statusCode).json({
       success: false,
       data: null,
