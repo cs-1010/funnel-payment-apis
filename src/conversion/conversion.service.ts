@@ -173,7 +173,8 @@ export class ConversionService {
       ...data,
       conversionType: conversionDto.conversionType,
       firstName: checkoutData.firstName,
-      lastName: checkoutData.lastName
+      lastName: checkoutData.lastName,
+      zipCode: conversionDto.billingZip
     };
   }
 
