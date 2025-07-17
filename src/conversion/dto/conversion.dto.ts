@@ -54,6 +54,10 @@ export class ConversionDto {
   lastName?: string;
 
   @IsOptional()
+  @IsNumber()
+  customerId?: number;
+
+  @IsOptional()
   @IsString()
   @MaxLength(20, { message: 'Phone number must not exceed 20 characters' })
   phone?: string;
