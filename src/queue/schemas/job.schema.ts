@@ -26,7 +26,7 @@ export class Job {
   result: any
 
   @Prop({
-    enum: ["PAGE_VISIT", "PAGE_CLICK", "SIGNUP", "SALE", "UPSELL_SALE", "FAILED_SALE", "FAILED_UPSELL_SALE","ERROR"],
+    enum: ["PAGE_VISIT", "PAGE_CLICK", "SIGNUP", "SALE", "UPSELL_SALE", "FAILED_SALE", "FAILED_UPSELL_SALE","ERROR","SCORE"],
     required: true,
   })
   type: string

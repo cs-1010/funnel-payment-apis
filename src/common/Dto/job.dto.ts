@@ -11,6 +11,7 @@ export const JOBS = {
     FAILED_SALE: "FAILED_SALE",
     FAILED_UPSELL_SALE: "FAILED_UPSELL_SALE",
     ERROR: "ERROR",
+    SCORE: "SCORE",
 }
 
 
