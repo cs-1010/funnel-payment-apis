@@ -498,8 +498,8 @@ export class ConversionService {
       checkoutData.device_category = conversionDto.deviceInfo.type;
     }
 
-    if (conversionDto.lastAttribution.utm_term) {
-      checkoutData.click_id = conversionDto.lastAttribution.utm_term;
+    if (conversionDto.lastAttribution._ef_transaction_id) {
+      checkoutData.click_id = conversionDto.lastAttribution._ef_transaction_id;
     }
 
     return checkoutData;
