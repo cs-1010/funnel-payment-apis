@@ -228,7 +228,7 @@ export class ConversionService {
         campaignId: campaignId,
         offers: transformedOffers,
         notes: "Upsell Purchased",
-        //custom_fields: this.getOrderCustomFields(conversionDto, "no"),
+        custom_fields: this.getOrderCustomFields(conversionDto, "no"),
       }
 
       const processedData = this.processOtherFields(upsellData, conversionDto);
@@ -505,33 +505,7 @@ export class ConversionService {
     return checkoutData;
   }
 
-  private async sendDeclineFeed(data: any): Promise<void> {
-    const processedData = this.toCamelCase(this.flattenArray(data));
-
-    if (processedData.offerId0) {
-      processedData.offerId = processedData.offerId0;
-    }
-
-    if (processedData.productId0) {
-      processedData.productId = processedData.productId0;
-    }
-
-    try {
-      const response = await lastValueFrom(
-        this.httpService.post('https://rotator.creditsecrets.com/api/declinefeed', processedData, {
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          }
-        })
-      );
-
-      console.log('Decline feed response:', response.status, response.data);
-    } catch (error) {
-      console.error('Error sending decline feed:', error.response?.data || error.message);
-    }
-  }
-
+  
   private toCamelCase(obj: any): any {
     if (Array.isArray(obj)) {
       return obj.map(v => this.toCamelCase(v));
@@ -578,22 +552,10 @@ export class ConversionService {
 
   private getOrderCustomFields(funnelDto: ConversionDto, is_book: string = "no"): any[] {
     const fields = [];
-    const fieldMappings = [
+
+    /*const fieldMappings = [
       { key: 'ga4_client_id', id: 14 },
-      { key: 'ga4_session_id', id: 15 },
-      { key: 'rt_variation_id', id: 13 },
-      { key: 'rt_rotator_id', id: 16 },
-      { key: 'utm_campaign_id', id: 22 },
-      { key: 'device', id: 40 },
-      { key: 'rt_funnel_id', id: 50 },
-      { key: 'rt_step_id', id: 51 },
-      { key: 'rt_variation_path', id: 52 },
-      { key: 'fbclid', id: 56 },
-      { key: 'fbpid', id: 58 },
-      { key: 'user_agent', id: 60 },
-      { key: 'gclid', id: 62 },
-      { key: 'rt_params', id: 64 },
-      { key: 'rt_funnel_name', id: 66 },
+     
     ];
 
     for (const mapping of fieldMappings) {
@@ -605,9 +567,12 @@ export class ConversionService {
         fields.push({ id: mapping.id, value: value });
       }
     }
-
+ */
 
     fields.push({ id: 17, value: is_book });
+    if (funnelDto.reasonForBuying) {
+      fields.push({ id: 18, value: funnelDto.reasonForBuying });
+    }
 
     return fields;
   }
