@@ -4,8 +4,13 @@ import { Type } from "class-transformer"
 export enum JobType {
     PAGE_VISIT = "PAGE_VISIT",
     PAGE_CLICK = "PAGE_CLICK",
-    SIGNUP= "SIGNUP",
-    SALE= "SALE",
+    SIGNUP = "SIGNUP",
+    SALE = "SALE",
+    UPSELL_SALE = "UPSELL_SALE",
+    FAILED_SALE = "FAILED_SALE",
+    FAILED_UPSELL_SALE = "FAILED_UPSELL_SALE",
+    ERROR = "ERROR",
+    SCORE = "SCORE",
 }
 
 export class CreateTaskDto {
