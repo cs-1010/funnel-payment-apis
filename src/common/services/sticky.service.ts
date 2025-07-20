@@ -16,27 +16,7 @@ interface ProspectInfo {
   prospect_id?: string;
 }
 
-interface ProspectData {
-  campaignId: string;
-  email: string;
-  firstName: string;
-  lastName: string;
-  phone: string;
-  city: string;
-  zip: string;
-  state: string;
-  address1: string;
-  country: string;
-  ipAddress: string;
-  AFID?: string;
-  AFFID?: string;
-  SID?: string;
-  C1?: string;
-  C2?: string;
-  C3?: string;
-  click_id?: string;
-  utm_campaign?: string;
-}
+
 
 
 @Injectable()
@@ -138,53 +118,11 @@ export class StickyService {
     }
   }
 
-  async findOrCreateProspect(postData: ConversionDto, ip: string): Promise<any | null> {
+  async findOrCreateProspect(processedData:any): Promise<any | null> {
 
-
-    const prospectData: ProspectData = {
-      campaignId: postData.stickyCampaignId.toString(),
-      email: postData.email,
-      firstName: postData.firstName || '',
-      lastName: postData.lastName || '',
-      phone: postData.phone || '',
-      city: postData.city || postData.city || '',
-      zip: postData.zip || postData.zip || '',
-      state: postData.state || postData.state || '',
-      address1: postData.address1 || '',
-      country: 'US',
-      ipAddress: ip || '127.0.0.1',
-    };
-
-    if (postData.lastAttribution && postData.lastAttribution._ef_transaction_id) {
-      prospectData.click_id = postData.lastAttribution._ef_transaction_id;
-    }
-
-
-    if (postData.afId) {
-      prospectData.AFID = this.cleanString(postData.afId);
-      prospectData.AFFID = this.cleanString(postData.afId);
-    }
-
-    if (postData.sid) {
-      prospectData.SID = this.cleanString(postData.sid);
-      prospectData.C1 = this.cleanString(postData.sid);
-    }
-
-
-    if (postData.c2) {
-      prospectData.AFID = this.cleanString(postData.c2);
-      prospectData.C2 = this.cleanString(postData.c2);
-    }
-
-    if (postData.c3) {
-      prospectData.SID = this.cleanString(postData.c3);
-      prospectData.C3 = this.cleanString(postData.c3);
-    }
-
-  
     const apiUrl = `${this.apiUrl}/api/v1/new_prospect`;
     const response: AxiosResponse<any> = await firstValueFrom(
-      this.httpService.post<any>(apiUrl, prospectData, {
+      this.httpService.post<any>(apiUrl, processedData, {
         auth: {
           username: this.username,
           password: this.password,

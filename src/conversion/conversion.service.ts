@@ -64,10 +64,33 @@ export class ConversionService {
   
   async processSignup(conversionDto: ConversionDto) {
 
-    const response = await this.stickyService.findOrCreateProspect({ ...conversionDto },  conversionDto.ipAddress);
+    const prospectData:any = {
+      campaignId: conversionDto.stickyCampaignId.toString(),
+      email: conversionDto.email,
+      firstName: conversionDto.firstName || '',
+      lastName: conversionDto.lastName || '',
+      phone: conversionDto.phone || '',
+      city: conversionDto.city || conversionDto.city || '',
+      zip: conversionDto.zip || conversionDto.zip || '',
+      state: conversionDto.state || conversionDto.state || '',
+      address1: conversionDto.address1 || '',
+      country: 'US',
+      ipAddress: conversionDto.ipAddress || '127.0.0.1',
+      custom_fields: this.getOrderCustomFields(conversionDto, 'yes')
+    };
+
+    const processedData = this.processOtherFields(prospectData, conversionDto);
+
+    const response = await this.stickyService.findOrCreateProspect(processedData);
+
+    const queueData = this.prepareQueueData(response, conversionDto, processedData);
+    
     
     if (response.prospectId) {
-      this.queueService.addJob(JOBS.SIGNUP, { ...conversionDto, prospectId: response.prospectId });
+      this.queueService.addJob(JOBS.SIGNUP, queueData);
+    }else{
+
+      this.queueService.addJob(JOBS.FAILED_SALE, queueData);
     }
     
     return response;
