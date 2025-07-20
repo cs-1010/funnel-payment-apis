@@ -114,11 +114,15 @@ export class ConversionService {
       try {
         const selectedMainOffer = JSON.parse(Buffer.from(conversionDto.mainOffer, 'base64').toString('utf8'));
         const mainOfferId = selectedMainOffer.offerId.toString(); // Convert to string for comparison
+        const mainProductId = selectedMainOffer.productId.toString();
+
         let bumpOfferId = null;
         
        
         const mainOfferObj = offers.find(offer => 
-          offer.offerId === mainOfferId && offer.type === "MAIN"
+          offer.offerId === mainOfferId  
+          && offer.productId === mainProductId
+          && offer.type === "MAIN"
         );
         campaignId = mainOfferObj.campaignId;
 
