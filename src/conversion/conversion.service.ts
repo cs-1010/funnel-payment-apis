@@ -166,7 +166,7 @@ export class ConversionService {
       ipAddress: conversionDto.ipAddress,
       offers: transformedOffers,
       custom_fields: this.getOrderCustomFields(conversionDto, 'yes'),
-      shippingCountry: "US",
+      billingCountry: "US",
       email: conversionDto.email,
       campaignId: campaignId,
       ...(firstName && { firstName }),
@@ -497,6 +497,22 @@ export class ConversionService {
 
     if (conversionDto.c3) {
       checkoutData.C3 = conversionDto.c3;
+    }
+
+    // Billing Fields
+    if (conversionDto.billingAddress) {
+      checkoutData.billingAddress1 = conversionDto.billingAddress;
+    }
+    if (conversionDto.billingCity) {
+      checkoutData.billingCity = conversionDto.billingCity;
+    }
+
+    if (conversionDto.billingState) {
+      checkoutData.billingState = conversionDto.billingState;
+    }
+
+    if (conversionDto.billingZip) {
+      checkoutData.billingZip = conversionDto.billingZip;
     }
 
     // UTM Parameters
