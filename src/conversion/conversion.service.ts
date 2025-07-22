@@ -516,7 +516,7 @@ export class ConversionService {
     }
     
     if (conversionDto.billingCountry) {
-      checkoutData.billingCountry = conversionDto.billingCountry;
+      checkoutData.billingCountry = 'US';//conversionDto.billingCountry;
     }
 
     // UTM Parameters
