@@ -166,7 +166,7 @@ export class ConversionService {
       ipAddress: conversionDto.ipAddress,
       offers: transformedOffers,
       custom_fields: this.getOrderCustomFields(conversionDto, 'yes'),
-      billingCountry: "US",
+      shippingCountry: "US",
       email: conversionDto.email,
       campaignId: campaignId,
       ...(firstName && { firstName }),
@@ -255,7 +255,7 @@ export class ConversionService {
         campaignId: campaignId,
         offers: transformedOffers,
         notes: "Upsell Purchased",
-        custom_fields: this.getOrderCustomFields(conversionDto, "no"),
+       // custom_fields: this.getOrderCustomFields(conversionDto, "no"),
       }
 
       const processedData = this.processOtherFields(upsellData, conversionDto);
@@ -513,6 +513,10 @@ export class ConversionService {
 
     if (conversionDto.billingZip) {
       checkoutData.billingZip = conversionDto.billingZip;
+    }
+    
+    if (conversionDto.billingCountry) {
+      checkoutData.billingCountry = conversionDto.billingCountry;
     }
 
     // UTM Parameters
