@@ -12,7 +12,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
-
+    
     let statusCode = 500;
     let errorMessage = 'An unexpected error occurred';
     let errorDetails: any = null;

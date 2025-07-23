@@ -23,11 +23,22 @@ export class QueueService implements OnModuleInit {
     this.startRetryProcess()
   }
 
-  async addJob(type: string, body: any, visitorId?: string): Promise<JobDocument | null> {
+  async addJob(type: string, body: any, ipAddress?: string): Promise<JobDocument | null> {
+    // Extract visitorId from body if it exists
+    const visitorId = body?.visitorId || body?.postedPayload?.visitorId || body?.processedPayload?.visitorId;
+    
+    // Extract ipAddress from body if it exists
+    if (!ipAddress) {
+      ipAddress = body?.ipAddress || body?.postedPayload?.ipAddress || body?.processedPayload?.ipAddress;
+    }
 
     let newJob = null;
-    if (visitorId) {
+    if (visitorId && ipAddress) {
+      newJob = new this.jobModel({ type, body, status: JobType.PENDING, visitorId, ipAddress })
+    } else if (visitorId) {
       newJob = new this.jobModel({ type, body, status: JobType.PENDING, visitorId })
+    } else if (ipAddress) {
+      newJob = new this.jobModel({ type, body, status: JobType.PENDING, ipAddress })
     } else {
       newJob = new this.jobModel({ type, body, status: JobType.PENDING })
     }

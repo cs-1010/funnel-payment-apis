@@ -27,7 +27,6 @@ export class ConversionService {
     private readonly httpService: HttpService) {
     this.shippingId = 2; // Default value, as free shipping
     this.failureReasons = [
-      "Pick up card - SF",
       "Insufficient Funds",
       "Do Not Honor",
       "This transaction has been declined",
@@ -131,8 +130,10 @@ export class ConversionService {
         if (conversionDto.bumpOffer) {
           const selectedBumpOffer = JSON.parse(Buffer.from(conversionDto.bumpOffer, 'base64').toString('utf8'));
           bumpOfferId = selectedBumpOffer.offerId.toString(); 
+          const bumpProductId = selectedBumpOffer.productId.toString();
           const bumpOfferObj = offers.find(offer => 
             offer.offerId === bumpOfferId && offer.type === "BUMP"
+             && offer.productId === bumpProductId
           );
           filteredOffers.push(bumpOfferObj);
         }

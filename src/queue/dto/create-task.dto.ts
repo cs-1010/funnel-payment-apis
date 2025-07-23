@@ -24,8 +24,6 @@ export class CreateTaskDto {
     body: Record<string, any>
 
 
-    @IsOptional()
-    @IsString()
-    visitorId?: string
+
 }
 

@@ -4,7 +4,7 @@ import { Request } from 'express';
 export const InjectIP = createParamDecorator(
   (data: unknown, ctx: ExecutionContext) => {
     const request: Request = ctx.switchToHttp().getRequest();
-    let ip = request.ip || request.connection.remoteAddress || '';
+    let ip = request.ip || request.socket.remoteAddress || '';
     
     // Remove IPv6 prefix if present
     ip = ip.replace(/^::ffff:/, '');
