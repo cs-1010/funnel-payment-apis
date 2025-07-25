@@ -6,8 +6,8 @@ import { ConversionController } from './conversion.controller';
 import { CommonModule } from 'src/common/common.module';
 import { ActiveCampaignService } from 'src/active-campaign/active-campaign.service';
 import { OffersService } from 'src/offers/offers.service';
-import { QueueModule } from 'src/queue/queue.module';
-import { Job, JobSchema } from 'src/queue/schemas/job.schema';
+import { Job, JobSchema } from 'src/common/schemas/job.schema';
+
 
 //import { Conversion, ConversionSchema } from './schemas/conversion.schema';
 
@@ -16,16 +16,17 @@ import { Job, JobSchema } from 'src/queue/schemas/job.schema';
     CommonModule,
     HttpModule,
     //MongooseModule.forFeature([{ name: Conversion.name, schema: ConversionSchema }]),
-    QueueModule,
+    
     MongooseModule.forFeature([{ name: Job.name, schema: JobSchema }]),
   ],
   controllers: [ConversionController],
   providers: [
     ConversionService, 
     ActiveCampaignService, 
-    OffersService
-    // Removed: StickyService, ResponseService (provided by CommonModule)
-    // Removed: QueueService (provided by QueueModule)
+    OffersService,
+
+    // Removed: StickyService (provided by CommonModule)
+
     // Removed: ConfigService (global)
   ],
 })

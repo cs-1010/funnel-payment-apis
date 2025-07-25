@@ -1,15 +1,17 @@
-import { ExceptionFilter, Catch, ArgumentsHost, HttpException, Injectable } from '@nestjs/common';
+import { ExceptionFilter, Catch, ArgumentsHost, HttpException, Injectable, Logger } from '@nestjs/common';
 import { Response } from 'express';
 import { MongoError } from 'mongodb';
-import { QueueService } from 'src/queue/queue.service'
-import { JOBS } from 'src/common/Dto/job.dto'
+import { JobService } from '../services/job.service'
+import { JobType } from '../dto/create-job.dto'
 
 @Injectable()
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
-  constructor(private readonly queueService: QueueService) {}
+  private readonly logger = new Logger(GlobalExceptionFilter.name);
+  
+  constructor(private readonly jobService: JobService) {}
 
-  catch(exception: unknown, host: ArgumentsHost) {
+  async catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
     
@@ -35,7 +37,11 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       }
       errorDetails = 'MongoDB Error';
     }
-    this.queueService.addJob(JOBS.ERROR, {"errorMessage" : errorMessage, errorDetails : errorDetails });
+    try {
+      await this.jobService.createJob(JobType.ERROR,{"errorMessage" : errorMessage, errorDetails : errorDetails });
+    } catch (jobError) {
+      this.logger.error('Failed to create ERROR job in exception filter:', jobError);
+    }
     response.status(statusCode).json({
       success: false,
       data: null,

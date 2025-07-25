@@ -5,9 +5,8 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { GlobalExceptionFilter } from './common/filters/exception.filter';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
-// import { QueueService } from './queue/queue.service';
-// import { CommandModule, CommandService } from 'nestjs-command';
 
+// import { CommandModule, CommandService } from 'nestjs-command';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
@@ -52,7 +51,6 @@ async function bootstrap() {
   
   //const configService = app.get(ConfigService);
 
-
   //const port = configService.get<number>('port');
 
   app.useGlobalPipes(
@@ -79,8 +77,7 @@ async function bootstrap() {
   )
 
 
-  // const queueService = app.get(QueueService);
-  // queueService.startProcessing();
+
 
   // await app.listen(port);
   

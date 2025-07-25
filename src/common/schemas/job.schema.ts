@@ -1,3 +1,4 @@
+// src/job-processor/entities/job.entity.ts
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Schema as MongooseSchema } from 'mongoose';
 
@@ -28,6 +29,7 @@ export class Job {
       'SALE',
       'UPSELL_SALE',
       'FAILED_SALE',
+      'FAILED_SIGNUP',
       'FAILED_UPSELL_SALE',
       'ERROR',
       'SCORE',
@@ -38,6 +40,9 @@ export class Job {
 
   @Prop({ type: String, required: false })
   visitorId?: string;
+
+  @Prop({ required: false })
+  accountId?: string;
 
   @Prop({ type: String, required: false })
   ipAddress?: string;
@@ -69,5 +74,5 @@ JobSchema.index(
 // Additional indexes for performance
 JobSchema.index({ type: 1, status: 1 });
 JobSchema.index({ visitorId: 1 });
-JobSchema.index({ ipAddress: 1 });
 JobSchema.index({ createdAt: 1 });
+JobSchema.index({ accountId: 1 });

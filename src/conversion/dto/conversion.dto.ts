@@ -13,6 +13,7 @@ import {
   IsNumber,
 } from 'class-validator';
 import { Expose, Type } from 'class-transformer';
+import { required } from 'joi';
 
 export enum ConversionType {
   SIGNUP = 'SIGNUP',
@@ -307,4 +308,13 @@ export class ConversionDto {
   @IsOptional()
   @IsString()
   deviceType?:string 
+
+  @IsString()
+  accountId:string
+
+  @IsOptional()
+  @IsString()
+  edgeId?:string
+
+  
 }

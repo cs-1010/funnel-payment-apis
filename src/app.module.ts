@@ -8,7 +8,8 @@ import { CommandModule } from "nestjs-command"
 import { AppController } from "./app.controller"
 import { AppService } from "./app.service"
 import { ConversionModule } from "./conversion/conversion.module"
-import { QueueModule } from "./queue/queue.module"
+import { CommonModule } from "./common/common.module"
+
 import { TestModule } from "./test/test.module"
 import { ExampleModule } from "./example/example.module"
 import { ActiveCampaignModule } from "./active-campaign/active-campaign.module"
@@ -32,8 +33,8 @@ import { GlobalExceptionFilter } from "./common/filters/exception.filter"
       }),
       inject: [ConfigService],
     }),
+    CommonModule,
     ConversionModule,
-    QueueModule,
     TestModule,
     ExampleModule,
     ActiveCampaignModule,

@@ -1,17 +1,17 @@
-import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import {  Injectable, Logger } from '@nestjs/common';
 import { ConversionDto } from './dto/conversion.dto';
 import { StickyService } from 'src/common/services/sticky.service';
-import { ResponseService } from 'src/common/services/response.service';
-import { QueueService } from 'src/queue/queue.service';
+
 import { ActiveCampaignService } from 'src/active-campaign/active-campaign.service';
 import { OffersService } from 'src/offers/offers.service';
-import { lastValueFrom } from 'rxjs';
+import { JobService } from '../common/services/job.service';
 import { HttpService } from '@nestjs/axios';
-import { JOBS } from 'src/common/Dto/job.dto';
+import { JobStatus, JobType } from 'src/common/dto/create-job.dto';
 import { ConversionType } from './dto/conversion.dto';
 
 @Injectable()
 export class ConversionService {
+  private readonly logger = new Logger(ConversionService.name);
   
   private failureReasons: string[] = [];
   private generateUniqueId(): string {
@@ -19,9 +19,7 @@ export class ConversionService {
   }
   private readonly shippingId: number;
   constructor(private readonly stickyService: StickyService, 
-    private readonly responseService: ResponseService, 
-    private readonly queueService: QueueService, 
-   
+    private readonly jobService: JobService,
     private readonly activeCampaignService: ActiveCampaignService,
     private readonly offersService: OffersService,
     private readonly httpService: HttpService) {
@@ -45,6 +43,9 @@ export class ConversionService {
     switch (conversionDto.conversionType) {
       case ConversionType.SIGNUP:
         response = await this.processSignup(conversionDto);
+        if(response.prospectId){
+          await this.addProspectCustomFields({...conversionDto, prospectId: response.prospectId});
+        }
         break;
       case ConversionType.PURCHASE:
         
@@ -75,7 +76,7 @@ export class ConversionService {
       address1: conversionDto.address1 || '',
       country: 'US',
       ipAddress: conversionDto.ipAddress || '127.0.0.1',
-      custom_fields: this.getOrderCustomFields(conversionDto, 'yes')
+      
     };
 
     const processedData = this.processOtherFields(prospectData, conversionDto);
@@ -85,12 +86,12 @@ export class ConversionService {
     const queueData = this.prepareQueueData(response, conversionDto, processedData);
     
     
-    if (response.prospectId) {
-      this.queueService.addJob(JOBS.SIGNUP, queueData);
-    }else{
+        if (response.prospectId) {
+          await this.jobService.createJob(JobType.SIGNUP,queueData);
+      }else{
 
-      this.queueService.addJob(JOBS.FAILED_SALE, queueData);
-    }
+        await this.jobService.createJob(JobType.FAILED_SIGNUP,queueData);
+      }
     
     return response;
   }
@@ -100,7 +101,16 @@ export class ConversionService {
     
     // Check if offers are empty
     if (!offers || offers.length === 0) {
-      this.queueService.addJob(JOBS.ERROR, {"errorMessage" : "Missing offers", "funnelId" : conversionDto?.ftFunnelId, "nodeId" : conversionDto?.ftNodeId});
+    
+      await this.jobService.createJob(JobType.ERROR,{
+        errorMessage : "Missing offers", 
+        funnelId : conversionDto?.ftFunnelId, 
+        nodeId : conversionDto?.ftNodeId,
+        visitorId: conversionDto.visitorId,
+        ipAddress: conversionDto.ipAddress,
+        accountId: conversionDto.accountId
+      });
+
       return { error_message: 'Payment failed, please contact support', error_found:"1" };    
     }
    
@@ -146,7 +156,14 @@ export class ConversionService {
     
     if (!filteredOffers || filteredOffers.length === 0) {
       //throw new HttpException("Invalid offers", HttpStatus.BAD_REQUEST);
-      this.queueService.addJob(JOBS.ERROR, {"errorMessage" : "Invalid offers", "funnelId" : conversionDto?.ftFunnelId, "nodeId" : conversionDto?.ftNodeId});
+      await this.jobService.createJob(JobType.ERROR,{
+        errorMessage : "Invalid offers", 
+        funnelId : conversionDto?.ftFunnelId, 
+        nodeId : conversionDto?.ftNodeId,
+        visitorId: conversionDto.visitorId,
+        ipAddress: conversionDto.ipAddress,
+        accountId: conversionDto.accountId
+      });
       return { error_message: 'Payment failed, please contact support', error_found:"1" };
     }
  
@@ -191,10 +208,10 @@ export class ConversionService {
     const queueData = this.prepareQueueData(data, conversionDto, checkoutData);
     
     if (response.resp_msg === "Approved") {
-      this.queueService.addJob(JOBS.SALE, queueData);
+      this.jobService.createJob(JobType.SALE,queueData);
     } else {
       // Queue failed transactions
-      this.queueService.addJob(JOBS.FAILED_SALE, queueData);
+      this.jobService.createJob(JobType.FAILED_SALE,queueData);
     }
 
     return {
@@ -213,7 +230,15 @@ export class ConversionService {
     
     // Check if offers are empty
     if (!offers || offers.length === 0) {
-      this.queueService.addJob(JOBS.ERROR, {"errorMessage" : "Missing offers", "funnelId" : conversionDto?.ftFunnelId, "nodeId" : conversionDto?.ftNodeId});
+      this.jobService.createJob(JobType.ERROR,{
+        errorMessage : "Missing offers", 
+        funnelId : conversionDto?.ftFunnelId, 
+        nodeId : conversionDto?.ftNodeId,
+        visitorId: conversionDto.visitorId,
+        ipAddress: conversionDto.ipAddress,
+        accountId: conversionDto.accountId
+      });
+
       return { error_message: 'Payment failed, please contact support', error_found:"1" };    
     }
    
@@ -241,7 +266,15 @@ export class ConversionService {
 
     if (!filteredOffers || filteredOffers.length === 0) {
       //throw new HttpException("Invalid offers", HttpStatus.BAD_REQUEST);
-      this.queueService.addJob(JOBS.ERROR, {"errorMessage" : "Invalid offers", "funnelId" : conversionDto?.ftFunnelId, "nodeId" : conversionDto?.ftNodeId});
+      this.jobService.createJob(JobType.ERROR,{
+        errorMessage : "Invalid offers", 
+        funnelId : conversionDto?.ftFunnelId, 
+        nodeId : conversionDto?.ftNodeId,
+        visitorId: conversionDto.visitorId,
+        ipAddress: conversionDto.ipAddress,
+        accountId: conversionDto.accountId
+      });
+
       return { error_message: 'Payment failed, please contact support', error_found:"1" };
     }
 
@@ -273,10 +306,9 @@ export class ConversionService {
 
        
       if (data.resp_msg === "Approved") {
-        this.queueService.addJob(JOBS.UPSELL_SALE, queueData);
+        this.jobService.createJob(JobType.UPSELL_SALE,queueData);
       } else {
-        // Queue failed transactions
-        this.queueService.addJob(JOBS.FAILED_SALE, queueData);
+        this.jobService.createJob(JobType.FAILED_SALE,queueData);
       }
   
       return queueData;
@@ -628,20 +660,8 @@ export class ConversionService {
   async addProspectCustomFields(funnelDto: ConversionDto) {
     const fields = [];
     const fieldMappings = [
-      { key: 'rt_rotator_id', id: 21 },
-      { key: 'rt_variation_id', id: 12 },
-      { key: 'device', id: 39 },
-      { key: 'ga4_client_id', id: 9 },
-      { key: 'ga4_session_id', id: 10 },
-      { key: 'rt_funnel_id', id: 47 },
-      { key: 'rt_variation_path', id: 49 },
-      { key: 'rt_step_id', id: 48 },
-      { key: 'fbclid', id: 55 },
-      { key: 'fbpid', id: 57 },
-      { key: 'user_agent', id: 59 },
-      { key: 'gclid', id: 61 },
       { key: 'rt_params', id: 63 },
-      { key: 'rt_funnel_name', id: 65 },
+      { key: 'reasonForBuying', id: 65 },
     ];
 
     fieldMappings.forEach(mapping => {
@@ -650,12 +670,12 @@ export class ConversionService {
       }
     });
 
-    if (funnelDto.quizAnswers) {
+    /*if (funnelDto.quizAnswers) {
       const quizAnswers = JSON.parse(funnelDto.quizAnswers);
       quizAnswers.forEach(answer => {
         fields.push({ id: answer.id, value: answer.value });
       });
-    }
+    }*/
 
     if (fields.length > 0 && funnelDto.prospectId) {
       const data = {
