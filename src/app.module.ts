@@ -7,7 +7,7 @@ import { AppService } from './app.service';
 import { ConversionModule } from './conversion/conversion.module';
 import { CommonModule } from './common/common.module';
 import { ActiveCampaignModule } from './active-campaign/active-campaign.module';
-import { OffersModule } from './offers/offers.module';
+
 
 @Module({
   imports: [
@@ -22,7 +22,7 @@ import { OffersModule } from './offers/offers.module';
     CommonModule,
     ConversionModule,
     ActiveCampaignModule,
-    OffersModule,
+  
   ],
   controllers: [AppController],
   providers: [AppService],

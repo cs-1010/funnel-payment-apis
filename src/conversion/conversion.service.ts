@@ -118,16 +118,13 @@ export class ConversionService {
     let filteredOffers: any[] = [];
     let campaignId: number | null = null;
     
-    if (conversionDto.mainOffer) {
+    if (conversionDto.mainOfferId && conversionDto.mainProductId) {
       
       try {
-        const selectedMainOffer = JSON.parse(Buffer.from(conversionDto.mainOffer, 'base64').toString('utf8'));
-        const mainOfferId = selectedMainOffer.offerId.toString(); // Convert to string for comparison
-        const mainProductId = selectedMainOffer.productId.toString();
-
-        let bumpOfferId = null;
         
-       
+        const mainOfferId = conversionDto.mainOfferId; 
+        const mainProductId = conversionDto.mainProductId;
+
         const mainOfferObj = offers.find(offer => 
           offer.offerId === mainOfferId  
           && offer.productId === mainProductId
@@ -137,10 +134,10 @@ export class ConversionService {
 
         filteredOffers.push(mainOfferObj);
         // Only parse bumpOffer if it exists
-        if (conversionDto.bumpOffer) {
-          const selectedBumpOffer = JSON.parse(Buffer.from(conversionDto.bumpOffer, 'base64').toString('utf8'));
-          bumpOfferId = selectedBumpOffer.offerId.toString(); 
-          const bumpProductId = selectedBumpOffer.productId.toString();
+        if (conversionDto.bumpOfferId && conversionDto.bumpProductId) {
+          
+          const bumpOfferId = conversionDto.bumpOfferId; 
+          const bumpProductId = conversionDto.bumpProductId;
           const bumpOfferObj = offers.find(offer => 
             offer.offerId === bumpOfferId && offer.type === "BUMP"
              && offer.productId === bumpProductId
@@ -201,7 +198,7 @@ export class ConversionService {
     // Handle fallback offers if main offer fails
     let data = { ...response };
     if (this.shouldHandleFallback(data)) {
-      data = await this.handleFallbackCheckoutOffers(conversionDto, processedData, filteredOffers);
+      data = await this.handleFallbackCheckoutOffers(conversionDto, processedData, offers);
     }
 
     // Queue jobs based on result
@@ -246,14 +243,14 @@ export class ConversionService {
     let filteredOffers: any[] = [];
     let campaignId: number | null = null;
     
-    if (conversionDto.mainOffer) {
+    if (conversionDto.mainOfferId && conversionDto.mainProductId) {
       
       try {
-        const selectedMainOffer = JSON.parse(Buffer.from(conversionDto.mainOffer, 'base64').toString('utf8'));
-        const mainOfferId = selectedMainOffer.offerId.toString(); // Convert to string for comparison
+        const mainOfferId = conversionDto.mainOfferId; 
+        const mainProductId = conversionDto.mainProductId;
          
         const mainOfferObj = offers.find(offer => 
-          offer.offerId === mainOfferId && offer.type === "MAIN"
+          offer.offerId === mainOfferId && offer.type === "MAIN" && offer.productId === mainProductId
         );
         campaignId = mainOfferObj.campaignId;
         filteredOffers.push(mainOfferObj);
@@ -298,7 +295,7 @@ export class ConversionService {
 
       let data = { ...response };
       if (this.shouldHandleFallback(data)) {
-        data = await this.handleFallbackUpsellOffers(conversionDto, processedData, filteredOffers);
+        data = await this.handleFallbackUpsellOffers(conversionDto, processedData, offers);
       }
   
       // Queue jobs based on result
@@ -346,8 +343,12 @@ export class ConversionService {
       .filter(offer => offer.type === "FALLBACK")
       .sort((a, b) => (a.priority || 999) - (b.priority || 999));
 
-    // Get bump offers
-    const bumpOffers = allOffers.filter(offer => offer.type === "BUMP");
+    // Get bump offers filtered by specific bumpOfferId and bumpProductId
+    const bumpOffers = allOffers.filter(offer => 
+      offer.type === "BUMP" && 
+      offer.offerId === convertionlDto.bumpOfferId && 
+      offer.productId === convertionlDto.bumpProductId
+    );
 
     // Try each fallback offer with bump offers
     for (const fallbackOffer of fallbackOffers) {

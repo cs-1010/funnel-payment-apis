@@ -5,7 +5,7 @@ import { ConversionController } from './conversion.controller';
 import { CommonModule } from '../common/common.module';
 import { ActiveCampaignModule } from '../active-campaign/active-campaign.module';
 import { StickyModule } from '../sticky/sticky.module';
-import { OffersModule } from '../offers/offers.module';
+
 
 @Module({
   imports: [
@@ -13,7 +13,7 @@ import { OffersModule } from '../offers/offers.module';
     HttpModule,
     ActiveCampaignModule,
     StickyModule,
-    OffersModule,
+    
   ],
   controllers: [ConversionController],
   providers: [ConversionService],

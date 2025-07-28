@@ -207,16 +207,28 @@ export class ConversionDto {
   @MaxLength(10)
   isBump?: string;
 
-  @IsOptional()
+  @ValidateIf((o) => o.conversionType === ConversionType.PURCHASE)
+  @IsNotEmpty({ message: 'Main offer ID is required' })
   @IsString()
-  @MaxLength(500)
-  mainOffer?: string;
+  @MaxLength(100)
+  mainOfferId: string;
+
+  
+  @ValidateIf((o) => o.conversionType === ConversionType.PURCHASE)
+  @IsNotEmpty({ message: 'Main product ID is required' })
+  @IsString()
+  @MaxLength(100)
+  mainProductId: string;
 
   @IsOptional()
   @IsString()
-  @MaxLength(500)
-  bumpOffer?: string;
+  @MaxLength(100)
+  bumpOfferId?: string;
 
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  bumpProductId?: string;
 
   @ValidateIf((o) => o.conversionType === ConversionType.PURCHASE)
   @IsNotEmpty({ message: 'Credit card cvc is required for checkout' })
