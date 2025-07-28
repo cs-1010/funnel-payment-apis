@@ -6,7 +6,7 @@ import { ActiveCampaignService } from 'src/active-campaign/active-campaign.servi
 import { OffersService } from 'src/offers/offers.service';
 import { JobService } from '../common/services/job.service';
 import { HttpService } from '@nestjs/axios';
-import { JobStatus, JobType } from 'src/common/dto/create-job.dto';
+import { JobStatus, JobType } from 'src/common/dto';
 import { ConversionType } from './dto/conversion.dto';
 
 @Injectable()
