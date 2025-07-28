@@ -10,7 +10,7 @@ export class ConversionController {
     constructor(private readonly conversionService: ConversionService) { }
 
     @Post()
-    @Throttle({ default: { limit: 100, ttl: 60000 } })
+    @Throttle({ default: { limit: 50, ttl: 60000 } })
     async create(@Body() conversionDto: ConversionDto, @InjectIP() ipAddress: string) {
             
          conversionDto.ipAddress = ipAddress;

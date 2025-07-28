@@ -14,25 +14,48 @@ export class JobService {
 
   async createJob(jobType:JobType,jobData: any) {
 
-    const { visitorId, ipAddress, accountId } = jobData.postedPayload;
-    
     // Validate required fields
     if (!jobType || !jobData) {
-      //this.logger.error('Missing required fields for job creation', { type, body });
+      this.logger.error('Missing required fields for job creation', { jobType, jobData });
       throw new Error('Missing required fields for job creation');
     }
 
+    // For ERROR type jobs, set context fields to null since they come from exception filter
+    const isErrorJob = jobType === JobType.ERROR;
+    
+    // Extract context fields based on data structure
+    let visitorId = null;
+    let ipAddress = null;
+    let accountId = null;
+    
+    if (isErrorJob) {
+      // For error jobs, context fields are null
+      visitorId = null;
+      ipAddress = null;
+      accountId = null;
+    } else if (jobData.postedPayload) {
+      // For regular jobs with postedPayload structure
+      visitorId = jobData.postedPayload.visitorId;
+      ipAddress = jobData.postedPayload.ipAddress;
+      accountId = jobData.postedPayload.accountId;
+    } else {
+      // Fallback for other structures
+      visitorId = jobData.visitorId;
+      ipAddress = jobData.ipAddress;
+      accountId = jobData.accountId;
+    }
+    
     // Create job in MongoDB database first
     const jobPayload = {
-      type:jobType,
-      visitorId,
-      accountId,
+      type: jobType,
+      visitorId: isErrorJob ? null : visitorId,
+      accountId: isErrorJob ? null : accountId,
       body: {
         ...jobData,   
         timestamp: new Date(),
       },
       status: JobStatus.PENDING,
-      ipAddress,
+      ipAddress: isErrorJob ? null : ipAddress,
     };
 
     try {

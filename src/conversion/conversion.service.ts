@@ -658,31 +658,29 @@ export class ConversionService {
   }
 
   async addProspectCustomFields(funnelDto: ConversionDto) {
-    const fields = [];
-    const fieldMappings = [
-      { key: 'rt_params', id: 63 },
-      { key: 'reasonForBuying', id: 65 },
-    ];
+    try {
 
-    fieldMappings.forEach(mapping => {
-      if (funnelDto[mapping.key]) {
-        fields.push({ id: mapping.id, value: funnelDto[mapping.key] });
+      const fields = [];
+      
+      if (funnelDto.reasonForBuying) {
+        fields.push({ id: 7, value: funnelDto.reasonForBuying });
       }
-    });
 
-    /*if (funnelDto.quizAnswers) {
-      const quizAnswers = JSON.parse(funnelDto.quizAnswers);
-      quizAnswers.forEach(answer => {
-        fields.push({ id: answer.id, value: answer.value });
-      });
-    }*/
+      if (fields.length > 0 && funnelDto.prospectId) {
+        const data = {
+          custom_fields: fields
+        };
 
-    if (fields.length > 0 && funnelDto.prospectId) {
-      const data = {
-        custom_fields: fields
-      };
-
-      await this.stickyService.updateProspectCustomFields(funnelDto.prospectId, data);
+        //this.logger.log(`Updating prospect ${funnelDto.prospectId} with custom fields:`, data);
+        await this.stickyService.updateProspectCustomFields(funnelDto.prospectId, data);
+        //this.logger.log(`Successfully updated prospect ${funnelDto.prospectId} custom fields`);
+      } else {
+        this.logger.log(`No custom fields to update for prospect ${funnelDto.prospectId}`);
+      }
+    } catch (error) {
+      this.logger.error(`Error updating prospect custom fields:`, error);
+      // Don't throw the error - just log it so it doesn't break the main flow
+      // The job creation and other processes should continue
     }
   }
 
