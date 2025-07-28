@@ -2,7 +2,7 @@ import { ExceptionFilter, Catch, ArgumentsHost, HttpException, Injectable, Logge
 import { Response } from 'express';
 import { MongoError } from 'mongodb';
 import { JobService } from '../services/job.service'
-import { JobType } from '../dto'
+import { JobType } from 'src/common/dto'
 
 @Injectable()
 @Catch()
