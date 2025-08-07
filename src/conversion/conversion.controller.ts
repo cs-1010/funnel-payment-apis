@@ -19,11 +19,6 @@ export class ConversionController {
     }
 
 
-   /* @Post("sync-prospect-custom-fields-and-tags")
-    async syncProspectCustomFields(@Body() conversionDto: ConversionDto) {
-        console.log("Sync prospect Custom Fields hit");
-        await this.conversionService.addProspectCustomFields(conversionDto);
-        await this.conversionService.syncProspectToActiveCampaign(conversionDto);
-    }*/
+   
 
 }
