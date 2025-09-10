@@ -204,7 +204,7 @@ export class ConversionService {
     // Queue jobs based on result
     const queueData = this.prepareQueueData(data, conversionDto, checkoutData);
     
-    if (response.resp_msg === "Approved") {
+    if (response.response_code === "100") {
       this.jobService.createJob(JobType.SALE,queueData);
     } else {
       // Queue failed transactions
