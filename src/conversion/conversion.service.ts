@@ -302,7 +302,7 @@ export class ConversionService {
       const queueData = this.prepareQueueData(data, conversionDto, processedData);
 
        
-      if (data.resp_msg === "Approved") {
+      if (response.response_code === "100") {
         this.jobService.createJob(JobType.UPSELL_SALE,queueData);
       } else {
         this.jobService.createJob(JobType.FAILED_SALE,queueData);
@@ -363,7 +363,7 @@ export class ConversionService {
 
         const response = await this.stickyService.processNewOrder(fallbackCheckoutData);
         
-        if (response.resp_msg === "Approved") {
+        if (response.response_code === "100") {
          
           return { ...response, isFallback: true, fallbackPriority: fallbackOffer.priority };
         }
@@ -400,7 +400,7 @@ export class ConversionService {
 
         const response = await this.stickyService.processNewUpsell(fallbackCheckoutData);
         
-        if (response.resp_msg === "Approved") {
+        if (response.response_code === "100") {
          
           return { ...response, isFallback: true, fallbackPriority: fallbackOffer.priority };
         }
