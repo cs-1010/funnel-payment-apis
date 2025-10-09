@@ -177,6 +177,48 @@ export class ConversionService {
       }
     }
 
+    // Scenario 1.5: Have prevOrderId but no customerId - create prospect first, then checkout
+    if (conversionDto.prevOrderId && !conversionDto.customerId && conversionDto.email) {
+      this.logger.log('Scenario 1.5: Have prevOrderId but no customerId - creating prospect first, then checkout');
+      
+      // Create prospect first
+      const prospectData = {
+        campaignId: conversionDto.stickyCampaignId.toString(),
+        email: conversionDto.email,
+        firstName: conversionDto.firstName || '',
+        lastName: conversionDto.lastName || '',
+        phone: conversionDto.phone || '',
+        city: conversionDto.city || '',
+        zip: conversionDto.zip || '',
+        state: conversionDto.state || 'CA',
+        address1: conversionDto.address1 || '',
+        country: 'US',
+        ipAddress: conversionDto.ipAddress || '127.0.0.1',
+        reasonForBuying: conversionDto.reasonForBuying,
+        lastAttribution: conversionDto.lastAttribution,
+      };
+
+      const processedProspectData = this.processVrioFields(prospectData, conversionDto);
+      const prospectResponse = await this.vrioService.createProspect(processedProspectData);
+
+      if (prospectResponse?.customer_id) {
+        // Now proceed with checkout using the created customer
+        conversionDto.customerId = prospectResponse.customer_id;
+        this.logger.log(`Prospect created successfully. Customer ID: ${prospectResponse.customer_id}, using existing Order ID: ${conversionDto.prevOrderId}`);
+      } else {
+        this.logger.error('Failed to create prospect, cannot proceed with checkout');
+        await this.jobService.createJob(JobType.ERROR, {
+          errorMessage: "Failed to create prospect",
+          funnelId: conversionDto?.ftFunnelId,
+          nodeId: conversionDto?.ftNodeId,
+          visitorId: conversionDto.visitorId,
+          ipAddress: conversionDto.ipAddress,
+          accountId: conversionDto.accountId
+        });
+        return { error_message: 'Failed to create prospect, please contact support', error_found: "1" };
+      }
+    }
+
     // Scenario 2: Direct checkout with existing prevOrderId and customerId
     if (conversionDto.prevOrderId && conversionDto.customerId) {
       this.logger.log('Scenario 2: Direct checkout with existing customer');
