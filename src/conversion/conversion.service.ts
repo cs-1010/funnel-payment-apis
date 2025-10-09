@@ -1,6 +1,7 @@
 import {  Injectable, Logger } from '@nestjs/common';
 import { ConversionDto } from './dto/conversion.dto';
 import { StickyService } from '../sticky/sticky.service';
+import { VrioService } from '../vrio/vrio.service';
 
 import { ActiveCampaignService } from 'src/active-campaign/active-campaign.service';
 
@@ -19,6 +20,7 @@ export class ConversionService {
   }
   private readonly shippingId: number;
   constructor(private readonly stickyService: StickyService, 
+    private readonly vrioService: VrioService,
     private readonly jobService: JobService,
     private readonly activeCampaignService: ActiveCampaignService,
   
@@ -43,9 +45,10 @@ export class ConversionService {
     switch (conversionDto.conversionType) {
       case ConversionType.SIGNUP:
         response = await this.processSignup(conversionDto);
-        if(response.prospectId){
-          await this.addProspectCustomFields({...conversionDto, prospectId: response.prospectId});
-        }
+        // Comment out Sticky custom fields update - VRIO handles this differently
+        // if(response.prospectId){
+        //   await this.addProspectCustomFields({...conversionDto, prospectId: response.prospectId});
+        // }
         break;
       case ConversionType.PURCHASE:
         
@@ -76,17 +79,23 @@ export class ConversionService {
       address1: conversionDto.address1 || '',
       country: 'US',
       ipAddress: conversionDto.ipAddress || '127.0.0.1',
-      
+      reasonForBuying: conversionDto.reasonForBuying,
+      lastAttribution: conversionDto.lastAttribution,
     };
 
-    const processedData = this.processOtherFields(prospectData, conversionDto);
+    // Process additional fields for VRIO (no longer need AFID, SID, etc. as per requirements)
+    const processedData = this.processVrioFields(prospectData, conversionDto);
 
-    const response = await this.stickyService.findOrCreateProspect(processedData);
+    // Use VRIO service instead of Sticky
+    const response = await this.vrioService.createProspect(processedData);
+
+    // Comment out Sticky service call
+    // const response = await this.stickyService.findOrCreateProspect(processedData);
 
     const queueData = this.prepareQueueData(response, conversionDto, processedData);
     
     
-        if (response?.prospectId) {
+        if (response?.order_id && response?.customer_id) {
           await this.jobService.createJob(JobType.SIGNUP,queueData);
       }else{
 
@@ -113,111 +122,106 @@ export class ConversionService {
 
       return { error_message: 'Payment failed, please contact support', error_found:"1" };    
     }
-   
-    // Filter offers based on mainOffer if provided
-    let filteredOffers: any[] = [];
-    let campaignId: number | null = null;
-    
-    if (conversionDto.mainOfferId && conversionDto.mainProductId) {
+
+    // Scenario 1: No prevOrderId and customerId, but email is provided - create prospect first
+    if ((!conversionDto.prevOrderId && !conversionDto.customerId) && conversionDto.email) {
+      this.logger.log('Scenario 1: Creating prospect first, then checkout');
       
-      try {
-        
-        const mainOfferId = conversionDto.mainOfferId; 
-        const mainProductId = conversionDto.mainProductId;
+      // Create prospect first
+      const prospectData = {
+        campaignId: conversionDto.stickyCampaignId.toString(),
+        email: conversionDto.email,
+        firstName: conversionDto.firstName || '',
+        lastName: conversionDto.lastName || '',
+        phone: conversionDto.phone || '',
+        city: conversionDto.city || '',
+        zip: conversionDto.zip || '',
+        state: conversionDto.state || '',
+        address1: conversionDto.address1 || '',
+        country: 'US',
+        ipAddress: conversionDto.ipAddress || '127.0.0.1',
+        reasonForBuying: conversionDto.reasonForBuying,
+        lastAttribution: conversionDto.lastAttribution,
+      };
 
-        const mainOfferObj = offers.find(offer => 
-          offer.offerId === mainOfferId  
-          && offer.productId === mainProductId
-          && offer.type === "MAIN"
-        );
-        campaignId = mainOfferObj.campaignId;
+      const processedProspectData = this.processVrioFields(prospectData, conversionDto);
+      const prospectResponse = await this.vrioService.createProspect(processedProspectData);
 
-        filteredOffers.push(mainOfferObj);
-        // Only parse bumpOffer if it exists
-        if (conversionDto.bumpOfferId && conversionDto.bumpProductId) {
-          
-          const bumpOfferId = conversionDto.bumpOfferId; 
-          const bumpProductId = conversionDto.bumpProductId;
-          const bumpOfferObj = offers.find(offer => 
-            offer.offerId === bumpOfferId && offer.type === "BUMP"
-             && offer.productId === bumpProductId
-          );
-          filteredOffers.push(bumpOfferObj);
-        }
-
-      } catch (error) {
-        console.error('Error parsing mainOffer:', error);
-        // Fallback to original offers if parsing fails
+      if (prospectResponse?.customer_id) {
+        // Now proceed with checkout using the created customer
+        conversionDto.customerId = prospectResponse.customer_id;
+        conversionDto.prevOrderId = prospectResponse.order_id;
+        this.logger.log(`Prospect created successfully. Customer ID: ${prospectResponse.customer_id}, Order ID: ${prospectResponse.order_id}`);
+      } else {
+        this.logger.error('Failed to create prospect, cannot proceed with checkout');
+        await this.jobService.createJob(JobType.ERROR, {
+          errorMessage: "Failed to create prospect",
+          funnelId: conversionDto?.ftFunnelId,
+          nodeId: conversionDto?.ftNodeId,
+          visitorId: conversionDto.visitorId,
+          ipAddress: conversionDto.ipAddress,
+          accountId: conversionDto.accountId
+        });
+        return { error_message: 'Failed to create prospect, please contact support', error_found: "1" };
       }
     }
-    
-    if (!filteredOffers || filteredOffers.length === 0) {
-      //throw new HttpException("Invalid offers", HttpStatus.BAD_REQUEST);
-      await this.jobService.createJob(JobType.ERROR,{
-        errorMessage : "Invalid offers", 
-        funnelId : conversionDto?.ftFunnelId, 
-        nodeId : conversionDto?.ftNodeId,
-        visitorId: conversionDto.visitorId,
-        ipAddress: conversionDto.ipAddress,
-        accountId: conversionDto.accountId
-      });
-      return { error_message: 'Payment failed, please contact support', error_found:"1" };
-    }
- 
-    // Transform offers to the required format for checkout
-    const transformedOffers = this.transformOffersForCheckout(filteredOffers);
-    
-    // Extract first and last name from cardHolderName
-    const { firstName, lastName } = this.extractNamesFromCardHolder(conversionDto.cardHolderName || '');
-    
-    // Build base checkout data
-    const checkoutData = {
-      creditCardNumber: (conversionDto.creditCardNumber || '').replace(/\s/g, ''),
-      expirationDate: `${conversionDto.creditCardExpiryMonth || ''}${(conversionDto.creditCardExpiryYear || '').substring((conversionDto.creditCardExpiryYear || '').length - 2)}`,
-      CVV: 'OVERRIDE',
-      creditCardType: this.getCardType(conversionDto.creditCardNumber || ''),
-      tranType: 'Sale',
-      shippingId:await this.getShippingId(campaignId || 1),
-      ipAddress: conversionDto.ipAddress,
-      offers: transformedOffers,
-      custom_fields: this.getOrderCustomFields(conversionDto, 'yes'),
-      shippingCountry: "US",
-      email: conversionDto.email,
-      campaignId: campaignId,
-      ...(firstName && { firstName }),
-      ...(lastName && { lastName }),
+
+    // Scenario 2: Direct checkout with existing prevOrderId and customerId
+    if (conversionDto.prevOrderId && conversionDto.customerId) {
+      this.logger.log('Scenario 2: Direct checkout with existing customer');
       
-    };
+      // Prepare checkout data for VRIO
+      const checkoutData = {
+        prevOrderId: conversionDto.prevOrderId,
+        customerId: conversionDto.customerId,
+        creditCardNumber: conversionDto.creditCardNumber,
+        creditCardExpiryMonth: conversionDto.creditCardExpiryMonth,
+        creditCardExpiryYear: conversionDto.creditCardExpiryYear,
+        cvc: conversionDto.cvc,
+        cardHolderName: conversionDto.cardHolderName,
+        billingAddress: conversionDto.billingAddress,
+        billingCity: conversionDto.billingCity,
+        billingState: conversionDto.billingState,
+        billingZip: conversionDto.billingZip,
+        billingCountry: conversionDto.billingCountry,
+        isBump: conversionDto.isBump,
+        offers: offers,
+      };
 
-    
-        // Process additional fields and checkout
-    const processedData = this.processOtherFields(checkoutData, conversionDto);
+      // Use VRIO service for checkout
+      const response = await this.vrioService.processCheckout(checkoutData);
 
-    let response = await this.stickyService.processNewOrder(processedData);
+      // Comment out Sticky service call
+      // const response = await this.stickyService.processNewOrder(processedData);
 
-    // Handle fallback offers if main offer fails
-    let data = { ...response };
-    if (this.shouldHandleFallback(data)) {
-      data = await this.handleFallbackCheckoutOffers(conversionDto, processedData, offers);
+      const queueData = this.prepareQueueData(response, conversionDto, checkoutData);
+      
+      if (response?.order_id) {
+        await this.jobService.createJob(JobType.SALE, queueData);
+      } else {
+        await this.jobService.createJob(JobType.FAILED_SALE, queueData);
+      }
+
+      return {
+        ...response,
+        conversionType: conversionDto.conversionType,
+        firstName: checkoutData.cardHolderName?.split(' ')[0] || '',
+        lastName: checkoutData.cardHolderName?.split(' ').slice(1).join(' ') || '',
+        zipCode: conversionDto.billingZip
+      };
     }
 
-    // Queue jobs based on result
-    const queueData = this.prepareQueueData(data, conversionDto, checkoutData);
-    
-    if (response.response_code === "100") {
-      this.jobService.createJob(JobType.SALE,queueData);
-    } else {
-      // Queue failed transactions
-      this.jobService.createJob(JobType.FAILED_SALE,queueData);
-    }
+    // If neither scenario is met, return error
+    await this.jobService.createJob(JobType.ERROR, {
+      errorMessage: "Invalid checkout scenario - missing required data",
+      funnelId: conversionDto?.ftFunnelId,
+      nodeId: conversionDto?.ftNodeId,
+      visitorId: conversionDto.visitorId,
+      ipAddress: conversionDto.ipAddress,
+      accountId: conversionDto.accountId
+    });
 
-    return {
-      ...data,
-      conversionType: conversionDto.conversionType,
-      firstName: checkoutData.firstName,
-      lastName: checkoutData.lastName,
-      zipCode: conversionDto.billingZip
-    };
+    return { error_message: 'Invalid checkout data, please contact support', error_found: "1" };
   }
 
 
@@ -238,80 +242,63 @@ export class ConversionService {
 
       return { error_message: 'Payment failed, please contact support', error_found:"1" };    
     }
-   
-    // Filter offers based on mainOffer if provided
-    let filteredOffers: any[] = [];
-    let campaignId: number | null = null;
-    
-    if (conversionDto.mainOfferId && conversionDto.mainProductId) {
-      
-      try {
-        const mainOfferId = conversionDto.mainOfferId; 
-        const mainProductId = conversionDto.mainProductId;
-         
-        const mainOfferObj = offers.find(offer => 
-          offer.offerId === mainOfferId && offer.type === "MAIN" && offer.productId === mainProductId
-        );
-        campaignId = mainOfferObj.campaignId;
-        filteredOffers.push(mainOfferObj);
-      
-      } catch (error) {
-        console.error('Error parsing mainOffer:', error);
-        
-      }
-    }
 
-    if (!filteredOffers || filteredOffers.length === 0) {
-      //throw new HttpException("Invalid offers", HttpStatus.BAD_REQUEST);
-      this.jobService.createJob(JobType.ERROR,{
-        errorMessage : "Invalid offers", 
-        funnelId : conversionDto?.ftFunnelId, 
-        nodeId : conversionDto?.ftNodeId,
+    // Validate required fields for upsell
+    if (!conversionDto.customerId) {
+      this.jobService.createJob(JobType.ERROR, {
+        errorMessage: "Customer ID is required for upsell",
+        funnelId: conversionDto?.ftFunnelId,
+        nodeId: conversionDto?.ftNodeId,
         visitorId: conversionDto.visitorId,
         ipAddress: conversionDto.ipAddress,
         accountId: conversionDto.accountId
       });
-
-      return { error_message: 'Payment failed, please contact support', error_found:"1" };
+      return { error_message: 'Customer ID is required for upsell', error_found: "1" };
     }
 
-    
-    const transformedOffers = this.transformOffersForCheckout(filteredOffers);
-   
-    
-      const upsellData = {
-        previousOrderId: conversionDto.preOrderId,
-        shippingId: await this.getShippingId(campaignId || 0),
+    if (!conversionDto.prevOrderId) {
+      this.jobService.createJob(JobType.ERROR, {
+        errorMessage: "Previous order ID is required for upsell",
+        funnelId: conversionDto?.ftFunnelId,
+        nodeId: conversionDto?.ftNodeId,
+        visitorId: conversionDto.visitorId,
         ipAddress: conversionDto.ipAddress,
-        campaignId: campaignId,
-        offers: transformedOffers,
-        notes: "Upsell Purchased",
-       // custom_fields: this.getOrderCustomFields(conversionDto, "no"),
-      }
+        accountId: conversionDto.accountId
+      });
+      return { error_message: 'Previous order ID is required for upsell', error_found: "1" };
+    }
 
-      const processedData = this.processOtherFields(upsellData, conversionDto);
-      
-      let response = await this.stickyService.processNewUpsell(processedData)
+    this.logger.log('Processing upsell with VRIO');
 
-      let data = { ...response };
-      if (this.shouldHandleFallback(data)) {
-        data = await this.handleFallbackUpsellOffers(conversionDto, processedData, offers);
-      }
-  
-      // Queue jobs based on result
-      const queueData = this.prepareQueueData(data, conversionDto, processedData);
+    // Prepare upsell data for VRIO
+    const upsellData = {
+      customerId: conversionDto.customerId,
+      prevOrderId: conversionDto.prevOrderId,
+      cardId: conversionDto.cardId || conversionDto.creditCardId, // Prioritize cardId over creditCardId
+      creditCardId: conversionDto.creditCardId,
+      customerBillingId: conversionDto.customerBillingId,
+      parentOfferId: conversionDto.parentOfferId,
+      mainOfferId: conversionDto.mainOfferId,
+      mainProductId: conversionDto.mainProductId,
+      stickyCampaignId: conversionDto.stickyCampaignId,
+      offers: offers,
+    };
 
-       
-      if (response.response_code === "100") {
-        this.jobService.createJob(JobType.UPSELL_SALE,queueData);
-      } else {
-        this.jobService.createJob(JobType.FAILED_SALE,queueData);
-      }
-  
-      return queueData;
+    // Use VRIO service for upsell
+    const response = await this.vrioService.processUpsell(upsellData);
+
+    // Comment out Sticky service call
+    // const response = await this.stickyService.processNewUpsell(processedData);
+
+    const queueData = this.prepareQueueData(response, conversionDto, upsellData);
     
-    //throw new HttpException("No valid offers found", HttpStatus.BAD_REQUEST)
+    if (response?.order_id) {
+      await this.jobService.createJob(JobType.UPSELL_SALE, queueData);
+    } else {
+      await this.jobService.createJob(JobType.FAILED_SALE, queueData);
+    }
 
+    return queueData;
   }
  
 
@@ -507,6 +494,26 @@ export class ConversionService {
   }
   
  
+  /**
+   * Process fields for VRIO API - simplified version without AFID, SID, etc.
+   * VRIO uses tracking variables instead of these legacy fields
+   */
+  private processVrioFields(prospectData: any, conversionDto: ConversionDto) {
+    // VRIO doesn't need AFID, SID, C1, C2, C3 fields as per requirements
+    // All tracking information is handled through the tracking variables in VRIO service
+    
+    // Add any additional fields that might be needed for VRIO
+    if (conversionDto.deviceInfo?.type) {
+      prospectData.device_category = conversionDto.deviceInfo.type;
+    }
+
+    if (conversionDto.lastAttribution?._ef_transaction_id) {
+      prospectData.click_id = conversionDto.lastAttribution._ef_transaction_id;
+    }
+
+    return prospectData;
+  }
+
   private processOtherFields(checkoutData: any, conversionDto: ConversionDto) {
     //filling other info
     if (conversionDto.lastAttribution?.campaign_id) {

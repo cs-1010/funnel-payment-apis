@@ -54,10 +54,6 @@ export class ConversionDto {
   lastName?: string;
 
   @IsOptional()
-  @IsNumber()
-  customerId?: number;
-
-  @IsOptional()
   @IsString()
   @MaxLength(20, { message: 'Phone number must not exceed 20 characters' })
   phone?: string;
@@ -230,8 +226,7 @@ export class ConversionDto {
   @MaxLength(100)
   bumpProductId?: string;
 
-  @ValidateIf((o) => o.conversionType === ConversionType.PURCHASE)
-  @IsNotEmpty({ message: 'Credit card cvc is required for checkout' })
+  @IsOptional()
   @IsString()
   @MaxLength(4)
   cvc?: string;
@@ -282,8 +277,7 @@ export class ConversionDto {
   @IsBoolean()
   isTrial?: boolean;
 
-  @ValidateIf((o) => o.conversionType === ConversionType.UPSELL)
-  @IsNotEmpty({ message: 'Previous order ID is required for upsells' })
+  @IsOptional()
   @IsString()
   preOrderId?: string;
 
@@ -326,6 +320,30 @@ export class ConversionDto {
   @IsOptional()
   @IsString()
   edgeId?:string
+
+  @IsOptional()
+  @IsNumber()
+  prevOrderId?: number;
+
+  @IsOptional()
+  @IsNumber()
+  customerId?: number;
+
+  @IsOptional()
+  @IsNumber()
+  cardId?: number;
+
+  @IsOptional()
+  @IsNumber()
+  creditCardId?: number;
+
+  @IsOptional()
+  @IsNumber()
+  customerBillingId?: number;
+
+  @IsOptional()
+  @IsNumber()
+  parentOfferId?: number;
 
   
 }

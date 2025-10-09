@@ -5,6 +5,7 @@ import { ConversionController } from './conversion.controller';
 import { CommonModule } from '../common/common.module';
 import { ActiveCampaignModule } from '../active-campaign/active-campaign.module';
 import { StickyModule } from '../sticky/sticky.module';
+import { VrioModule } from '../vrio/vrio.module';
 
 
 @Module({
@@ -13,6 +14,7 @@ import { StickyModule } from '../sticky/sticky.module';
     HttpModule,
     ActiveCampaignModule,
     StickyModule,
+    VrioModule,
     
   ],
   controllers: [ConversionController],
