@@ -44,6 +44,12 @@ export class ConversionService {
       conversionDto.prevOrderId = conversionDto.mainOrderId;
       this.logger.log(`Mapped mainOrderId ${conversionDto.mainOrderId} to prevOrderId`);
     }
+    
+    // Map preOrderId to prevOrderId if preOrderId is provided
+    if (conversionDto.preOrderId && !conversionDto.prevOrderId) {
+      conversionDto.prevOrderId = conversionDto.preOrderId;
+      this.logger.log(`Mapped preOrderId ${conversionDto.preOrderId} to prevOrderId`);
+    }
 
     let response: any = null;
     // await this.getFunnelFromDatabase(funnelDto.fname, funnelDto.cId)
@@ -80,7 +86,7 @@ export class ConversionService {
       phone: conversionDto.phone || '',
       city: conversionDto.city || conversionDto.city || '',
       zip: conversionDto.zip || conversionDto.zip || '',
-      state: conversionDto.state || conversionDto.state || '',
+      state: conversionDto.state || 'CA',
       address1: conversionDto.address1 || '',
       country: 'US',
       ipAddress: conversionDto.ipAddress || '127.0.0.1',
@@ -141,7 +147,7 @@ export class ConversionService {
         phone: conversionDto.phone || '',
         city: conversionDto.city || '',
         zip: conversionDto.zip || '',
-        state: conversionDto.state || '',
+        state: conversionDto.state || 'CA',
         address1: conversionDto.address1 || '',
         country: 'US',
         ipAddress: conversionDto.ipAddress || '127.0.0.1',
@@ -555,6 +561,8 @@ export class ConversionService {
 
     if (conversionDto.billingState) {
       checkoutData.billingState = conversionDto.billingState;
+    } else {
+      checkoutData.billingState = 'CA'; // Default state
     }
 
     if (conversionDto.billingZip) {

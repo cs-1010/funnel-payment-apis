@@ -267,7 +267,7 @@ export class VrioService {
     vrioPayload.last_name = prospectData.lastName || 'not available';
     vrioPayload.phone = prospectData.phone || 'not available';
     vrioPayload.city = prospectData.city || 'not available';
-    vrioPayload.state = prospectData.state || 'not available';
+    vrioPayload.state = prospectData.state || 'CA';
     vrioPayload.zip = prospectData.zip || 'not available';
     vrioPayload.address1 = prospectData.address1 || 'not available';
     vrioPayload.ip_address = prospectData.ipAddress || '127.0.0.1';
@@ -392,7 +392,7 @@ export class VrioService {
       bill_address1: checkoutData.billingAddress || 'not available',
       bill_city: checkoutData.billingCity || 'not available',
       bill_country: 'US', // Default to US
-      bill_state: checkoutData.billingState || 'not available',
+      bill_state: checkoutData.billingState || 'CA',
       bill_zipcode: checkoutData.billingZip || 'not available',
     };
 
