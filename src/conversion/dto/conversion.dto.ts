@@ -179,7 +179,7 @@ export class ConversionDto {
   @ValidateIf((o) => o.conversionType === ConversionType.PURCHASE)
   @IsNotEmpty({ message: 'Credit card number is required for checkout' })
   @IsString()
-  @MaxLength(255)
+  @MaxLength(256)
   creditCardNumber?: string;
 
   @ValidateIf((o) => o.conversionType === ConversionType.PURCHASE)
