@@ -34,7 +34,7 @@ export interface StickyApiResponse {
   gatewayDescriptor?: string;
   subscription_id?: { [key: string]: string };
   // Prospect-specific fields
-  prospectId?: string;
+  prospectId?: number;
   // Generic catch-all for any other fields
   [key: string]: any;
 }
@@ -215,7 +215,7 @@ export class StickyService {
     }
   }
 
-  async updateProspectCustomFields(prospectId: string, data: any): Promise<StickyApiResponse> {
+  async updateProspectCustomFields(prospectId: number, data: any): Promise<StickyApiResponse> {
     const url = `${this.apiUrl}/api/v2/prospects/${prospectId}/custom_fields`;
 
     try {

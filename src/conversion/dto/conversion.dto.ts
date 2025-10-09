@@ -162,8 +162,8 @@ export class ConversionDto {
   ftNodeId?: string;
 
   @IsOptional()
-  @IsString()
-  prospectId?: string;
+  @IsNumber()
+  prospectId?: number;
 
   @IsOptional()
   @IsString()
