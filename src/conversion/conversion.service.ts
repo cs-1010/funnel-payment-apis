@@ -39,6 +39,11 @@ export class ConversionService {
 
 
   async process(conversionDto: ConversionDto) {
+    // Map mainOrderId to prevOrderId if mainOrderId is provided
+    if (conversionDto.mainOrderId && !conversionDto.prevOrderId) {
+      conversionDto.prevOrderId = conversionDto.mainOrderId;
+      this.logger.log(`Mapped mainOrderId ${conversionDto.mainOrderId} to prevOrderId`);
+    }
 
     let response: any = null;
     // await this.getFunnelFromDatabase(funnelDto.fname, funnelDto.cId)

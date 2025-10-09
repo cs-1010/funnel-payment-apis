@@ -278,8 +278,8 @@ export class ConversionDto {
   isTrial?: boolean;
 
   @IsOptional()
-  @IsString()
-  preOrderId?: string;
+  @IsNumber()
+  preOrderId?: number;
 
   @IsOptional()
   @IsObject()
@@ -320,6 +320,10 @@ export class ConversionDto {
   @IsOptional()
   @IsString()
   edgeId?:string
+
+  @IsOptional()
+  @IsNumber()
+  mainOrderId?: number;
 
   @IsOptional()
   @IsNumber()
