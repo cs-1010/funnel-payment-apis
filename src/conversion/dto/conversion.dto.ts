@@ -349,5 +349,13 @@ export class ConversionDto {
   @IsNumber()
   parentOfferId?: number;
 
+  @IsOptional()
+  @IsNumber()
+  customerCardId?: number;
+
+  @IsOptional()
+  @IsNumber()
+  customerAdressBillingId?: number;
+
   
 }

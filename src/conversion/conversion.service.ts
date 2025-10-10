@@ -351,11 +351,14 @@ export class ConversionService {
       prevOrderId: conversionDto.prevOrderId,
       cardId: conversionDto.cardId || conversionDto.creditCardId, // Prioritize cardId over creditCardId
       creditCardId: conversionDto.creditCardId,
+      customerCardId: conversionDto.customerCardId,
       customerBillingId: conversionDto.customerBillingId,
+      customerAdressBillingId: conversionDto.customerAdressBillingId,
       parentOfferId: conversionDto.parentOfferId,
       mainOfferId: conversionDto.mainOfferId,
       mainProductId: conversionDto.mainProductId,
       stickyCampaignId: conversionDto.stickyCampaignId,
+      lastAttribution: conversionDto.lastAttribution,
       offers: offers,
     };
 

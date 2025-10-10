@@ -512,6 +512,7 @@ export class VrioService {
       
       this.logger.log(`VRIO upsell payload:`, JSON.stringify(vrioPayload, null, 2));
       this.logger.log(`VRIO upsell API URL:`, apiUrl);
+      this.logger.log(`Input upsellData:`, JSON.stringify(upsellData, null, 2));
       this.logger.log(`VRIO API Key configured:`, !!this.apiKey);
       this.logger.log(`VRIO API Key (first 10 chars):`, this.apiKey ? this.apiKey.substring(0, 10) + '...' : 'NOT SET');
       
@@ -595,17 +596,62 @@ export class VrioService {
       connection_id: 1,
       campaign_id: upsellData.stickyCampaignId || 2,
       customer_id: upsellData.customerId,
-      customers_address_billing_id: upsellData.customerBillingId || upsellData.customerId,
+      customers_address_billing_id: upsellData.customerAdressBillingId || upsellData.customerBillingId || upsellData.customerId,
       customer_card_id: upsellData.cardId || upsellData.customerCardId || upsellData.creditCardId,
       action: "process",
       payment_method_id: 1,
     };
 
-    // Map offers - find the main offer for upsell
+    // Map tracking fields from lastAttribution
+    if (upsellData.lastAttribution) {
+      const attr = upsellData.lastAttribution;
+      
+      // tracking1: utm_campaign
+      if (attr.utm_campaign) {
+        vrioPayload.tracking1 = attr.utm_campaign;
+      }
+      
+      // tracking2: utm_source
+      if (attr.utm_source) {
+        vrioPayload.tracking2 = attr.utm_source;
+      }
+      
+      // tracking3: h_ad_id
+      if (attr.h_ad_id) {
+        vrioPayload.tracking3 = attr.h_ad_id;
+      }
+      
+      // tracking4: adid
+      if (attr.adid) {
+        vrioPayload.tracking4 = attr.adid;
+      }
+      
+      // tracking5: gc_id
+      if (attr.gc_id) {
+        vrioPayload.tracking5 = attr.gc_id;
+      }
+      
+      // tracking6: campaign_id
+      if (attr.campaign_id) {
+        vrioPayload.tracking6 = attr.campaign_id;
+      }
+    }
+
+    // Map offers - simplified format for upsell
     const offers: any[] = [];
     
-    if (upsellData.offers && upsellData.offers.length > 0) {
-      // Find the main offer based on mainOfferId and mainProductId
+    // For upsell, use parentOfferId directly (this is the offer we want to upsell to)
+    if (upsellData.parentOfferId) {
+      offers.push({
+        offer_id: parseInt(upsellData.parentOfferId.toString()),
+        order_offer_quantity: 1, // Default quantity, can be adjusted if needed
+        item_id: parseInt(upsellData.mainProductId || '1'), // Use mainProductId as item_id
+        order_offer_upsell: true,
+        parent_offer_id: upsellData.parentOfferId,
+        parent_order_id: upsellData.prevOrderId
+      });
+    } else if (upsellData.offers && upsellData.offers.length > 0) {
+      // Fallback: Find the main offer based on mainOfferId and mainProductId
       const mainOffer = upsellData.offers.find(offer => 
         offer.offerId == upsellData.mainOfferId && 
         offer.productId == upsellData.mainProductId &&
@@ -616,10 +662,10 @@ export class VrioService {
         offers.push({
           offer_id: parseInt(mainOffer.offerId),
           order_offer_quantity: mainOffer.quantity || 1,
-          order_offer_upsell: true,
-          parent_order_id: upsellData.prevOrderId,
-          item_id: parseInt(mainOffer.productId),
-          parent_offer_id: upsellData.parentOfferId || 6 // Default parent offer ID
+          item_id: parseInt(mainOffer.productId || upsellData.mainProductId || '1'),
+          order_offer_upsell:true,
+          parent_offer_id:upsellData.parentOfferId,
+            parent_order_id:upsellData.preOrderId
         });
       } else {
         // Fallback: use the first MAIN offer if specific main offer not found
@@ -628,10 +674,11 @@ export class VrioService {
           offers.push({
             offer_id: parseInt(fallbackMainOffer.offerId),
             order_offer_quantity: fallbackMainOffer.quantity || 1,
-            order_offer_upsell: true,
-            parent_order_id: upsellData.prevOrderId,
-            item_id: parseInt(fallbackMainOffer.productId),
-            parent_offer_id: upsellData.parentOfferId || 6
+            item_id: parseInt(fallbackMainOffer.productId || upsellData.mainProductId || '1'),
+            order_offer_upsell:true,
+            parent_offer_id:upsellData.parentOfferId,
+            parent_order_id:upsellData.prevOrderId
+            
           });
         }
       }
@@ -639,6 +686,8 @@ export class VrioService {
     
     vrioPayload.offers = offers;
 
+    this.logger.log('Final VRIO upsell payload:', JSON.stringify(vrioPayload, null, 2));
+    
     return vrioPayload;
   }
 
