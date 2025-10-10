@@ -725,6 +725,115 @@ export class VrioService {
   }
 
   /**
+   * Update customer information in VRIO
+   */
+  async updateCustomer(customerId: number, customerData: { firstName?: string; lastName?: string }): Promise<VrioApiResponse | null> {
+    const apiUrl = `${this.apiUrl}/customers/${customerId}`;
+    console.log('VRIO update customer apiUrl', apiUrl);
+
+    try {
+      this.logger.log(`Updating customer in VRIO for customer ID: ${customerId}`);
+      
+      // Validate required fields
+      if (!customerId) {
+        throw new Error('Customer ID is required for VRIO customer update');
+      }
+      
+      // Prepare the payload
+      const vrioPayload: any = {};
+      
+      if (customerData.firstName) {
+        vrioPayload.first_name = customerData.firstName;
+      }
+      
+      if (customerData.lastName) {
+        vrioPayload.last_name = customerData.lastName;
+      }
+      
+      // If no data to update, return early
+      if (Object.keys(vrioPayload).length === 0) {
+        this.logger.log('No customer data to update');
+        return null;
+      }
+      
+      this.logger.log(`VRIO update customer payload:`, JSON.stringify(vrioPayload, null, 2));
+      this.logger.log(`VRIO update customer API URL:`, apiUrl);
+      this.logger.log(`VRIO API Key configured:`, !!this.apiKey);
+      this.logger.log(`VRIO API Key (first 10 chars):`, this.apiKey ? this.apiKey.substring(0, 10) + '...' : 'NOT SET');
+      
+      const authConfig = this.getAuthConfig();
+      this.logger.log(`Auth config headers:`, authConfig.headers);
+      this.logger.log(`Full update customer request config:`, {
+        url: apiUrl,
+        method: 'PATCH',
+        headers: authConfig.headers,
+        data: vrioPayload
+      });
+      
+      let response: AxiosResponse<VrioApiResponse>;
+      try {
+        response = await firstValueFrom(
+          this.httpService.patch<VrioApiResponse>(apiUrl, vrioPayload, authConfig)
+        );
+      } catch (httpError) {
+        this.logger.error('HTTP Request failed:', httpError);
+        this.logger.error('HTTP Error response:', httpError.response);
+        this.logger.error('HTTP Error status:', httpError.response?.status);
+        this.logger.error('HTTP Error data:', httpError.response?.data);
+        throw httpError; // Re-throw to be caught by outer catch block
+      }
+
+      this.logger.log(`VRIO update customer API Response Status: ${response.status}`);
+      this.logger.log(`VRIO update customer API Response Data:`, JSON.stringify(response.data, null, 2));
+
+      // Check for successful response
+      if (response.status >= 200 && response.status < 300) {
+        this.logger.log(`VRIO customer update successful for customer ID: ${customerId}`);
+        return response.data;
+      } else {
+        this.logger.warn(`VRIO customer update failed: ${JSON.stringify(response.data)}`);
+        return null;
+      }
+    } catch (error) {
+      this.logger.error('Full error object:', error);
+      this.logger.error('Error response:', error.response);
+      this.logger.error('Error response data:', error.response?.data);
+      this.logger.error('Error message:', error.message);
+      
+      // Better error message extraction
+      let errorMessage = 'Unknown error';
+      
+      if (error.response?.data) {
+        this.logger.error('Response data type:', typeof error.response.data);
+        this.logger.error('Response data stringified:', JSON.stringify(error.response.data));
+        
+        if (typeof error.response.data === 'string') {
+          errorMessage = error.response.data;
+        } else if (error.response.data.message) {
+          errorMessage = error.response.data.message;
+        } else if (error.response.data.error) {
+          errorMessage = error.response.data.error;
+        } else if (error.response.data.errors) {
+          errorMessage = Array.isArray(error.response.data.errors) 
+            ? error.response.data.errors.join(', ') 
+            : JSON.stringify(error.response.data.errors);
+        } else {
+          errorMessage = JSON.stringify(error.response.data);
+        }
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      this.logger.error('Final error message:', errorMessage);
+      
+      throw new HttpException(
+        `Failed to update customer in VRIO: ${errorMessage}`, 
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  /**
    * Generate a unique cart token for VRIO
    */
   private generateCartToken(): string {

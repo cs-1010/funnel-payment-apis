@@ -226,6 +226,21 @@ export class ConversionService {
     if (conversionDto.prevOrderId && conversionDto.customerId) {
       this.logger.log('Scenario 2: Direct checkout with existing customer');
       
+      // Update customer first and last name in VRIO if available
+      if (conversionDto.firstName || conversionDto.lastName) {
+        try {
+          this.logger.log(`Updating customer ${conversionDto.customerId} with firstName: ${conversionDto.firstName}, lastName: ${conversionDto.lastName}`);
+          await this.vrioService.updateCustomer(conversionDto.customerId, {
+            firstName: conversionDto.firstName,
+            lastName: conversionDto.lastName
+          });
+          this.logger.log('Customer update completed successfully');
+        } catch (error) {
+          this.logger.error('Failed to update customer in VRIO:', error);
+          // Continue with checkout even if customer update fails
+        }
+      }
+      
       // Prepare checkout data for VRIO
       const checkoutData = {
         prevOrderId: conversionDto.prevOrderId,
