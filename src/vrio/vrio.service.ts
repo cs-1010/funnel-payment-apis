@@ -640,10 +640,10 @@ export class VrioService {
     // Map offers - simplified format for upsell
     const offers: any[] = [];
     
-    // For upsell, use parentOfferId directly (this is the offer we want to upsell to)
-    if (upsellData.parentOfferId) {
+    // For upsell, use mainOfferId for offer_id and parentOfferId for parent_offer_id
+    if (upsellData.mainOfferId && upsellData.parentOfferId) {
       offers.push({
-        offer_id: parseInt(upsellData.parentOfferId.toString()),
+        offer_id: parseInt(upsellData.mainOfferId.toString()),
         order_offer_quantity: 1, // Default quantity, can be adjusted if needed
         item_id: parseInt(upsellData.mainProductId || '1'), // Use mainProductId as item_id
         order_offer_upsell: true,
@@ -687,6 +687,15 @@ export class VrioService {
     vrioPayload.offers = offers;
 
     this.logger.log('Final VRIO upsell payload:', JSON.stringify(vrioPayload, null, 2));
+   
+    
+    // Write payload to file for debugging
+    // const fs = require('fs');
+    // const path = require('path');
+    // const payloadFile = path.join(process.cwd(), 'vrio-upsell-payload.txt');
+    // const payloadContent = `VRIO Upsell Payload - ${new Date().toISOString()}\n\n${JSON.stringify(vrioPayload, null, 2)}\n\n`;
+    // fs.appendFileSync(payloadFile, payloadContent);
+    // console.log(`Payload written to: ${payloadFile}`);
     
     return vrioPayload;
   }
