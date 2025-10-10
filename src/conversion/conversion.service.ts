@@ -232,6 +232,8 @@ export class ConversionService {
         creditCardExpiryYear: conversionDto.creditCardExpiryYear,
         cvc: conversionDto.cvc,
         cardHolderName: conversionDto.cardHolderName,
+        firstName: conversionDto.firstName,
+        lastName: conversionDto.lastName,
         billingAddress: conversionDto.billingAddress,
         billingCity: conversionDto.billingCity,
         billingState: conversionDto.billingState,
@@ -255,11 +257,14 @@ export class ConversionService {
         await this.jobService.createJob(JobType.FAILED_SALE, queueData);
       }
 
+      // Determine first and last names for response
+      const { firstName, lastName } = this.determineNames(conversionDto);
+
       return {
         ...response,
         conversionType: conversionDto.conversionType,
-        firstName: checkoutData.cardHolderName?.split(' ')[0] || '',
-        lastName: checkoutData.cardHolderName?.split(' ').slice(1).join(' ') || '',
+        firstName: firstName,
+        lastName: lastName,
         zipCode: conversionDto.billingZip
       };
     }
@@ -788,6 +793,38 @@ export class ConversionService {
     }
 
     return this.shippingId; // default free shipping
+  }
+
+  /**
+   * Determine first and last names from available data
+   * Priority: firstName/lastName fields, then split cardHolderName
+   */
+  private determineNames(conversionDto: ConversionDto): { firstName: string; lastName: string } {
+    let firstName = '';
+    let lastName = '';
+    
+    // Check if firstName and lastName are available
+    if (conversionDto.firstName && conversionDto.lastName) {
+      firstName = conversionDto.firstName;
+      lastName = conversionDto.lastName;
+    } else if (conversionDto.firstName && conversionDto.cardHolderName) {
+      // If only firstName is available, use it and split cardHolderName for lastName
+      firstName = conversionDto.firstName;
+      const nameParts = conversionDto.cardHolderName.trim().split(' ');
+      lastName = nameParts.slice(1).join(' ') || nameParts[0] || '';
+    } else if (conversionDto.lastName && conversionDto.cardHolderName) {
+      // If only lastName is available, use it and split cardHolderName for firstName
+      lastName = conversionDto.lastName;
+      const nameParts = conversionDto.cardHolderName.trim().split(' ');
+      firstName = nameParts[0] || '';
+    } else if (conversionDto.cardHolderName) {
+      // Split cardHolderName if firstName/lastName not available
+      const nameParts = conversionDto.cardHolderName.trim().split(' ');
+      firstName = nameParts[0] || '';
+      lastName = nameParts.slice(1).join(' ') || '';
+    }
+    
+    return { firstName, lastName };
   }
 
   

@@ -378,6 +378,31 @@ export class VrioService {
    * Map checkout data to VRIO checkout format
    */
   private mapToVrioCheckoutFormat(checkoutData: any): any {
+    // Determine first and last names
+    let firstName = 'not available';
+    let lastName = 'not available';
+    
+    // Check if firstName and lastName are available
+    if (checkoutData.firstName && checkoutData.lastName) {
+      firstName = checkoutData.firstName;
+      lastName = checkoutData.lastName;
+    } else if (checkoutData.firstName && checkoutData.cardHolderName) {
+      // If only firstName is available, use it and split cardHolderName for lastName
+      firstName = checkoutData.firstName;
+      const nameParts = checkoutData.cardHolderName.trim().split(' ');
+      lastName = nameParts.slice(1).join(' ') || nameParts[0] || 'not available';
+    } else if (checkoutData.lastName && checkoutData.cardHolderName) {
+      // If only lastName is available, use it and split cardHolderName for firstName
+      lastName = checkoutData.lastName;
+      const nameParts = checkoutData.cardHolderName.trim().split(' ');
+      firstName = nameParts[0] || 'not available';
+    } else if (checkoutData.cardHolderName) {
+      // Split cardHolderName if firstName/lastName not available
+      const nameParts = checkoutData.cardHolderName.trim().split(' ');
+      firstName = nameParts[0] || 'not available';
+      lastName = nameParts.slice(1).join(' ') || 'not available';
+    }
+
     const vrioPayload: any = {
       connection_id: 1,
       payment_method_id: 1,
@@ -387,8 +412,8 @@ export class VrioService {
       card_exp_month: parseInt(checkoutData.creditCardExpiryMonth),
       card_exp_year: parseInt(checkoutData.creditCardExpiryYear),
       customer_id: checkoutData.customerId,
-      bill_fname: checkoutData.cardHolderName?.split(' ')[0] || 'not available',
-      bill_lname: checkoutData.cardHolderName?.split(' ').slice(1).join(' ') || 'not available',
+      bill_fname: firstName,
+      bill_lname: lastName,
       bill_address1: checkoutData.billingAddress || 'not available',
       bill_city: checkoutData.billingCity || 'not available',
       bill_country: 'US', // Default to US
