@@ -455,32 +455,61 @@ export class VrioService {
 
   /**
    * Get card type ID for VRIO
+   * 1 - Mastercard
+   * 2 - Visa
+   * 3 - Discover
+   * 4 - American Express
+   * 5 - Digital Wallet
+   * 6 - ACH
    */
   private getCardTypeId(cardNumber: string): number {
     const cardType = this.getCardType(cardNumber);
     const cardTypeMap = {
-      'visa': 1,
-      'master': 2,
-      'amex': 3,
-      'discover': 4,
-      'unknown': 1 // Default to Visa
+      'master': 1,      // Mastercard
+      'visa': 2,        // Visa
+      'discover': 3,    // Discover
+      'amex': 4,        // American Express
+      'digital_wallet': 5, // Digital Wallet
+      'ach': 6,         // ACH
+      'unknown': 2      // Default to Visa
     };
-    return cardTypeMap[cardType] || 1;
+    return cardTypeMap[cardType] || 2;
   }
 
   /**
    * Get card type from card number
    */
   private getCardType(cardNumber: string): string {
+    // Clean the card number (remove spaces, dashes, etc.)
+    const cleanCardNumber = cardNumber.replace(/\D/g, '');
+    
     const patterns = {
-      visa: /^4\d{12}(?:\d{3})?$/,
-      master: /^5[1-5]\d{14}$/,
+      // Visa: starts with 4, 13-19 digits
+      visa: /^4\d{12,18}$/,
+      // Mastercard: starts with 5[1-5] or 2[2-7], 16 digits
+      master: /^(5[1-5]\d{14}|2[2-7]\d{14})$/,
+      // American Express: starts with 3[47], 15 digits
       amex: /^3[47]\d{13}$/,
-      discover: /^(?:6011|65\d{2}|64[4-9]\d)\d{12}$/
+      // Discover: starts with 6011, 65, or 64[4-9], 16 digits
+      discover: /^(6011\d{12}|65\d{14}|64[4-9]\d{13})$/,
+      // Digital Wallet: typically shorter or specific patterns
+      digital_wallet: /^(apple|google|paypal|stripe)/i,
+      // ACH: typically 9 digits (routing number) or specific patterns
+      ach: /^\d{9}$/
     };
 
+    // Check for digital wallet or ACH first (these might not be traditional card numbers)
+    if (patterns.digital_wallet.test(cardNumber)) {
+      return 'digital_wallet';
+    }
+    
+    if (patterns.ach.test(cleanCardNumber)) {
+      return 'ach';
+    }
+
+    // Check traditional card patterns
     for (const [cardType, pattern] of Object.entries(patterns)) {
-      if (pattern.test(cardNumber)) {
+      if (cardType !== 'digital_wallet' && cardType !== 'ach' && pattern.test(cleanCardNumber)) {
         return cardType;
       }
     }
