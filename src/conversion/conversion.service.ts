@@ -118,7 +118,10 @@ export class ConversionService {
   async processCheckout(conversionDto: ConversionDto): Promise<any> {
 
     const offers = this.normalizeOffers(conversionDto.offers);
-    
+     // Determine first and last names for response
+     const { firstName, lastName } = this.determineNames(conversionDto);
+     conversionDto.firstName = firstName;
+     conversionDto.lastName = lastName;
     // Check if offers are empty
     if (!offers || offers.length === 0) {
     
@@ -257,8 +260,7 @@ export class ConversionService {
         await this.jobService.createJob(JobType.FAILED_SALE, queueData);
       }
 
-      // Determine first and last names for response
-      const { firstName, lastName } = this.determineNames(conversionDto);
+     
 
       return {
         ...response,
