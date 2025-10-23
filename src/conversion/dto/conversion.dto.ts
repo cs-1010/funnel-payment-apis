@@ -357,5 +357,9 @@ export class ConversionDto {
   @IsNumber()
   customerAdressBillingId?: number;
 
+  @IsOptional()
+  @IsString()
+  url?:string
+
   
 }
