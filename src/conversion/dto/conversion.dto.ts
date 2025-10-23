@@ -361,5 +361,8 @@ export class ConversionDto {
   @IsString()
   url?:string
 
+  @IsOptional()
+  @IsString()
+  referrer?:string
   
 }
