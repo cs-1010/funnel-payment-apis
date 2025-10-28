@@ -313,8 +313,7 @@ export class VrioService {
     
     
     try {
-      this.logger.log(`Processing checkout in VRIO for order: ${checkoutData.prevOrderId}`);
-      
+
       // Validate required fields
       if (!checkoutData.prevOrderId) {
         throw new Error('Previous order ID is required for VRIO checkout');
@@ -456,30 +455,8 @@ export class VrioService {
    * Map checkout data to VRIO checkout format
    */
   private mapToVrioCheckoutFormat(checkoutData: any): any {
-    // Determine first and last names
-    let firstName = 'not available';
-    let lastName = 'not available';
-    
-    // Check if firstName and lastName are available
-    if (checkoutData.firstName && checkoutData.lastName) {
-      firstName = checkoutData.firstName;
-      lastName = checkoutData.lastName;
-    } else if (checkoutData.firstName && checkoutData.cardHolderName) {
-      // If only firstName is available, use it and split cardHolderName for lastName
-      firstName = checkoutData.firstName;
-      const nameParts = checkoutData.cardHolderName.trim().split(' ');
-      lastName = nameParts.slice(1).join(' ') || nameParts[0] || 'not available';
-    } else if (checkoutData.lastName && checkoutData.cardHolderName) {
-      // If only lastName is available, use it and split cardHolderName for firstName
-      lastName = checkoutData.lastName;
-      const nameParts = checkoutData.cardHolderName.trim().split(' ');
-      firstName = nameParts[0] || 'not available';
-    } else if (checkoutData.cardHolderName) {
-      // Split cardHolderName if firstName/lastName not available
-      const nameParts = checkoutData.cardHolderName.trim().split(' ');
-      firstName = nameParts[0] || 'not available';
-      lastName = nameParts.slice(1).join(' ') || 'not available';
-    }
+    // Determine first and last names using shared logic
+    const { firstName, lastName } = this.determineNames(checkoutData);
 
     const vrioPayload: any = {
       connection_id: 1,
@@ -516,7 +493,7 @@ export class VrioService {
       }
       
       // Only include bump offer if isBump is true
-      if (checkoutData.isBump === '1' || checkoutData.isBump === true) {
+      if (checkoutData.isBump === '1' || checkoutData.isBump === true || checkoutData.isBump === 1) {
         const bumpOffer = checkoutData.offers.find(offer => offer.type === 'BUMP' 
           && offer.offerId === checkoutData.bumpOfferId 
           && offer.productId === checkoutData.bumpProductId);
@@ -1030,6 +1007,38 @@ export class VrioService {
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
+  }
+
+  /**
+   * Determine first and last names from available data
+   * Priority: firstName/lastName fields, then split cardHolderName
+   */
+  private determineNames(data: any): { firstName: string; lastName: string } {
+    let firstName = 'not available';
+    let lastName = 'not available';
+    
+    // Check if firstName and lastName are available
+    if (data.firstName && data.lastName) {
+      firstName = data.firstName;
+      lastName = data.lastName;
+    } else if (data.firstName && data.cardHolderName) {
+      // If only firstName is available, use it and split cardHolderName for lastName
+      firstName = data.firstName;
+      const nameParts = data.cardHolderName.trim().split(' ');
+      lastName = nameParts.slice(1).join(' ') || nameParts[0] || 'not available';
+    } else if (data.lastName && data.cardHolderName) {
+      // If only lastName is available, use it and split cardHolderName for firstName
+      lastName = data.lastName;
+      const nameParts = data.cardHolderName.trim().split(' ');
+      firstName = nameParts[0] || 'not available';
+    } else if (data.cardHolderName) {
+      // Split cardHolderName if firstName/lastName not available
+      const nameParts = data.cardHolderName.trim().split(' ');
+      firstName = nameParts[0] || 'not available';
+      lastName = nameParts.slice(1).join(' ') || 'not available';
+    }
+    
+    return { firstName, lastName };
   }
 
   /**

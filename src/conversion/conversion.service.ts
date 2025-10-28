@@ -278,6 +278,13 @@ export class ConversionService {
         await this.jobService.createJob(JobType.SALE, queueData);
       } else {
         await this.jobService.createJob(JobType.FAILED_SALE, queueData);
+
+        
+        if (response && this.shouldHandleFallback(response.error)) {
+          
+        } else {
+          
+        }
       }
 
      
@@ -402,8 +409,8 @@ export class ConversionService {
 
 
   private shouldHandleFallback(data: any): boolean {
-    return data.error_message
-      && this.failureReasons.findIndex(reason => reason.toLowerCase() === data.error_message.toLowerCase()) !== -1;
+    return data.error
+      && this.failureReasons.findIndex(reason => reason.toLowerCase() === data.toLowerCase()) !== -1;
   }
 
   private async handleFallbackCheckoutOffers(convertionlDto: ConversionDto, checkoutData: any, allOffers: any[]): Promise<any> {
