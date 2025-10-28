@@ -112,20 +112,8 @@ export class VrioService {
       
       // Map the data to VRIO format
       const vrioPayload = this.mapToVrioFormat(prospectData);
-      
-      this.logger.log(`VRIO payload:`, JSON.stringify(vrioPayload, null, 2));
-      this.logger.log(`VRIO API URL:`, apiUrl);
-      this.logger.log(`VRIO API Key configured:`, !!this.apiKey);
-      this.logger.log(`VRIO API Key (first 10 chars):`, this.apiKey ? this.apiKey.substring(0, 10) + '...' : 'NOT SET');
-      
+       
       const authConfig = this.getAuthConfig();
-      this.logger.log(`Auth config headers:`, authConfig.headers);
-      this.logger.log(`Full request config:`, {
-        url: apiUrl,
-        method: 'POST',
-        headers: authConfig.headers,
-        data: vrioPayload
-      });
       
       let response: AxiosResponse<VrioApiResponse>;
       try {
@@ -133,36 +121,78 @@ export class VrioService {
           this.httpService.post<VrioApiResponse>(apiUrl, vrioPayload, authConfig)
         );
       } catch (httpError) {
-        this.logger.error('HTTP Request failed:', httpError);
-        this.logger.error('HTTP Error response:', httpError.response);
-        this.logger.error('HTTP Error status:', httpError.response?.status);
-        this.logger.error('HTTP Error data:', httpError.response?.data);
-        throw httpError; // Re-throw to be caught by outer catch block
+        // Handle HTTP errors - check if it's a business logic error vs system error
+        if (httpError.response && httpError.response.status >= 400 && httpError.response.status < 500) {
+          // This is likely a business logic error (validation, etc.)
+          // Extract error message and return it as a failed prospect creation response
+          let errorMessage = 'Prospect creation failed';
+          
+          if (httpError.response.data) {
+            if (typeof httpError.response.data === 'string') {
+              errorMessage = httpError.response.data;
+            } else if (httpError.response.data.error && typeof httpError.response.data.error === 'object' && 'message' in httpError.response.data.error) {
+              errorMessage = (httpError.response.data.error as any).message;
+            } else if (httpError.response.data.message) {
+              errorMessage = httpError.response.data.message;
+            } else if (httpError.response.data.error) {
+              errorMessage = typeof httpError.response.data.error === 'string' 
+                ? httpError.response.data.error 
+                : JSON.stringify(httpError.response.data.error);
+            } else {
+              errorMessage = JSON.stringify(httpError.response.data);
+            }
+          }
+          
+          this.logger.warn(`VRIO prospect creation failed (HTTP ${httpError.response.status}): ${errorMessage}`);
+          
+          // Return failed prospect creation response instead of throwing exception
+          return {
+            ...httpError.response.data,
+            success: false,
+            error: errorMessage,
+            payment_failed: true,
+            http_status: httpError.response.status
+          };
+        } else {
+          // This is a system error (network, server error, etc.) - re-throw to outer catch block
+      
+          throw httpError;
+        }
       }
-
-      this.logger.log(`VRIO API Response Status: ${response.status}`);
-      this.logger.log(`VRIO API Response Data:`, JSON.stringify(response.data, null, 2));
 
       // Check for successful response - VRIO returns order_id on success
       if (response.data.order_id && response.status >= 200 && response.status < 300) {
-        this.logger.log(`VRIO prospect creation successful - Order ID: ${response.data.order_id}, Customer ID: ${response.data.customer_id}`);
+        //this.logger.log(`VRIO prospect creation successful - Order ID: ${response.data.order_id}, Customer ID: ${response.data.customer_id}`);
         return response.data;
       } else {
+        // Handle failed prospect creation - VRIO returns error details in response body
         this.logger.warn(`VRIO prospect creation failed: ${JSON.stringify(response.data)}`);
-        return null;
+        
+        // Check if there's a specific error message in the response
+        let errorMessage = 'Prospect creation failed';
+        if (response.data.error && typeof response.data.error === 'object' && 'message' in response.data.error) {
+          errorMessage = (response.data.error as any).message;
+        } else if (response.data.message) {
+          errorMessage = response.data.message;
+        } else if (response.data.error) {
+          errorMessage = typeof response.data.error === 'string' 
+            ? response.data.error 
+            : JSON.stringify(response.data.error);
+        }
+        
+        // Return the response data with error information instead of null
+        return {
+          ...response.data,
+          success: false,
+          error: errorMessage,
+          payment_failed: true
+        };
       }
     } catch (error) {
-      this.logger.error('Full error object:', error);
-      this.logger.error('Error response:', error.response);
-      this.logger.error('Error response data:', error.response?.data);
-      this.logger.error('Error message:', error.message);
-      
       // Better error message extraction
       let errorMessage = 'Unknown error';
       
       if (error.response?.data) {
-        this.logger.error('Response data type:', typeof error.response.data);
-        this.logger.error('Response data stringified:', JSON.stringify(error.response.data));
         
         if (typeof error.response.data === 'string') {
           errorMessage = error.response.data;
@@ -299,15 +329,52 @@ export class VrioService {
       const authConfig = this.getAuthConfig();
 
       
+      
       let response: AxiosResponse<VrioApiResponse>;
+
       try {
         response = await firstValueFrom(
           this.httpService.post<VrioApiResponse>(apiUrl, vrioPayload, authConfig)
         );
+     
+     
       } catch (httpError) {
-       
-        throw httpError; // Re-throw to be caught by outer catch block
-        
+        // Handle HTTP errors - check if it's a business logic error (failed payment) vs system error
+        if (httpError.response && httpError.response.status >= 400 && httpError.response.status < 500) {
+          // This is likely a business logic error (failed payment, validation, etc.)
+          // Extract error message and return it as a failed payment response
+          let errorMessage = 'Payment processing failed';
+          
+          if (httpError.response.data) {
+            if (typeof httpError.response.data === 'string') {
+              errorMessage = httpError.response.data;
+            } else if (httpError.response.data.error && typeof httpError.response.data.error === 'object' && 'message' in httpError.response.data.error) {
+              errorMessage = (httpError.response.data.error as any).message;
+            } else if (httpError.response.data.message) {
+              errorMessage = httpError.response.data.message;
+            } else if (httpError.response.data.error) {
+              errorMessage = typeof httpError.response.data.error === 'string' 
+                ? httpError.response.data.error 
+                : JSON.stringify(httpError.response.data.error);
+            } else {
+              errorMessage = JSON.stringify(httpError.response.data);
+            }
+          }
+          
+    //      this.logger.warn(`VRIO checkout failed (HTTP ${httpError.response.status}): ${errorMessage}`);
+          
+          // Return failed payment response instead of throwing exception
+          return {
+            ...httpError.response.data,
+            success: false,
+            error: errorMessage,
+            payment_failed: true,
+            http_status: httpError.response.status
+          };
+        } else {
+          // This is a system error (network, server error, etc.) - re-throw to outer catch block
+          throw httpError;
+        }
       }
 
       // Check for successful response - VRIO returns order_id on success
@@ -315,9 +382,30 @@ export class VrioService {
         this.logger.log(`VRIO checkout successful - Order ID: ${response.data.order_id}, Customer ID: ${response.data.customer_id}`);
         return response.data;
       } else {
-        this.logger.warn(`VRIO checkout failed: ${JSON.stringify(response.data)}`);
-        return null;
+        // Handle failed payment - VRIO returns error details in response body
+       // this.logger.warn(`VRIO checkout failed: ${JSON.stringify(response.data)}`);
+        
+        // Check if there's a specific error message in the response
+        let errorMessage = 'Payment processing failed';
+        if (response.data.error && typeof response.data.error === 'object' && 'message' in response.data.error) {
+          errorMessage = (response.data.error as any).message;
+        } else if (response.data.message) {
+          errorMessage = response.data.message;
+        } else if (response.data.error) {
+          errorMessage = typeof response.data.error === 'string' 
+            ? response.data.error 
+            : JSON.stringify(response.data.error);
+        }
+        
+        // Return the response data with error information instead of throwing exception
+        return {
+          ...response.data,
+          success: false,
+          error: errorMessage,
+          payment_failed: true
+        };
       }
+
     } catch (error) {
       // Better error message extraction
       let errorMessage = 'Unknown error';
@@ -357,9 +445,10 @@ export class VrioService {
       }
       
       throw new HttpException(
-        `Failed to process checkout in VRIO: ${errorMessage}`, 
+        `${errorMessage}`, 
         httpStatus
       );
+      
     }
   }
 
@@ -541,8 +630,42 @@ export class VrioService {
           this.httpService.post<VrioApiResponse>(apiUrl, vrioPayload, authConfig)
         );
       } catch (httpError) {
-        
-        throw httpError; // Re-throw to be caught by outer catch block
+        // Handle HTTP errors - check if it's a business logic error vs system error
+        if (httpError.response && httpError.response.status >= 400 && httpError.response.status < 500) {
+          // This is likely a business logic error (validation, etc.)
+          // Extract error message and return it as a failed upsell response
+          let errorMessage = 'Upsell processing failed';
+          
+          if (httpError.response.data) {
+            if (typeof httpError.response.data === 'string') {
+              errorMessage = httpError.response.data;
+            } else if (httpError.response.data.error && typeof httpError.response.data.error === 'object' && 'message' in httpError.response.data.error) {
+              errorMessage = (httpError.response.data.error as any).message;
+            } else if (httpError.response.data.message) {
+              errorMessage = httpError.response.data.message;
+            } else if (httpError.response.data.error) {
+              errorMessage = typeof httpError.response.data.error === 'string' 
+                ? httpError.response.data.error 
+                : JSON.stringify(httpError.response.data.error);
+            } else {
+              errorMessage = JSON.stringify(httpError.response.data);
+            }
+          }
+          
+          this.logger.warn(`VRIO upsell failed (HTTP ${httpError.response.status}): ${errorMessage}`);
+          
+          // Return failed upsell response instead of throwing exception
+          return {
+            ...httpError.response.data,
+            success: false,
+            error: errorMessage,
+            payment_failed: true,
+            http_status: httpError.response.status
+          };
+        } else {
+          // This is a system error (network, server error, etc.) - re-throw to outer catch block
+          throw httpError;
+        }
       }
 
       this.logger.log(`VRIO upsell API Response Status: ${response.status}`);
@@ -553,8 +676,28 @@ export class VrioService {
         this.logger.log(`VRIO upsell successful - Order ID: ${response.data.order_id}, Customer ID: ${response.data.customer_id}`);
         return response.data;
       } else {
+        // Handle failed upsell - VRIO returns error details in response body
         this.logger.warn(`VRIO upsell failed: ${JSON.stringify(response.data)}`);
-        return null;
+        
+        // Check if there's a specific error message in the response
+        let errorMessage = 'Upsell processing failed';
+        if (response.data.error && typeof response.data.error === 'object' && 'message' in response.data.error) {
+          errorMessage = (response.data.error as any).message;
+        } else if (response.data.message) {
+          errorMessage = response.data.message;
+        } else if (response.data.error) {
+          errorMessage = typeof response.data.error === 'string' 
+            ? response.data.error 
+            : JSON.stringify(response.data.error);
+        }
+        
+        // Return the response data with error information instead of null
+        return {
+          ...response.data,
+          success: false,
+          error: errorMessage,
+          payment_failed: true
+        };
       }
     } catch (error) {
       this.logger.error('Full error object:', error);
