@@ -63,7 +63,7 @@ export class ConversionService {
         break;
       case ConversionType.PURCHASE:
         
-        response = await this.processCheckout(conversionDto);
+        response =await this.processCheckout(conversionDto);
         break;
       case ConversionType.UPSELL:
         
@@ -258,9 +258,14 @@ export class ConversionService {
         billingZip: conversionDto.billingZip,
         billingCountry: conversionDto.billingCountry,
         isBump: conversionDto.isBump,
+        mainOfferId: conversionDto.mainOfferId,
+        mainProductId: conversionDto.mainProductId,
+        bumpOfferId: conversionDto.bumpOfferId,
+        bumpProductId: conversionDto.bumpProductId,
         offers: offers,
       };
 
+      
       // Use VRIO service for checkout
       const response = await this.vrioService.processCheckout(checkoutData);
 

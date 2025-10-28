@@ -26,6 +26,10 @@ async function bootstrap() {
   // Global exception filter and interceptor are already registered in CommonModule
   // No need to manually register them here
 
-  await app.listen(process.env.PORT ?? 3000);
+  const port = process.env.PORT ?? 3000;
+  await app.listen(port);
+  
+  console.log(`🚀 Application is running on: http://localhost:${port}`);
+  console.log(`📋 API endpoints available at: http://localhost:${port}/api`);
 }
 bootstrap();

@@ -280,8 +280,8 @@ export class VrioService {
    */
   async processCheckout(checkoutData: any): Promise<VrioApiResponse | null> {
     const apiUrl = `${this.apiUrl}/orders/${checkoutData.prevOrderId}/process`;
-    console.log('VRIO checkout apiUrl', apiUrl);
-
+    
+    
     try {
       this.logger.log(`Processing checkout in VRIO for order: ${checkoutData.prevOrderId}`);
       
@@ -296,20 +296,8 @@ export class VrioService {
       
       // Map the data to VRIO checkout format
       const vrioPayload = this.mapToVrioCheckoutFormat(checkoutData);
-      
-      this.logger.log(`VRIO checkout payload:`, JSON.stringify(vrioPayload, null, 2));
-      this.logger.log(`VRIO checkout API URL:`, apiUrl);
-      this.logger.log(`VRIO API Key configured:`, !!this.apiKey);
-      this.logger.log(`VRIO API Key (first 10 chars):`, this.apiKey ? this.apiKey.substring(0, 10) + '...' : 'NOT SET');
-      
       const authConfig = this.getAuthConfig();
-      this.logger.log(`Auth config headers:`, authConfig.headers);
-      this.logger.log(`Full checkout request config:`, {
-        url: apiUrl,
-        method: 'POST',
-        headers: authConfig.headers,
-        data: vrioPayload
-      });
+
       
       let response: AxiosResponse<VrioApiResponse>;
       try {
@@ -317,15 +305,10 @@ export class VrioService {
           this.httpService.post<VrioApiResponse>(apiUrl, vrioPayload, authConfig)
         );
       } catch (httpError) {
-        this.logger.error('HTTP Request failed:', httpError);
-        this.logger.error('HTTP Error response:', httpError.response);
-        this.logger.error('HTTP Error status:', httpError.response?.status);
-        this.logger.error('HTTP Error data:', httpError.response?.data);
+       
         throw httpError; // Re-throw to be caught by outer catch block
+        
       }
-
-      this.logger.log(`VRIO checkout API Response Status: ${response.status}`);
-      this.logger.log(`VRIO checkout API Response Data:`, JSON.stringify(response.data, null, 2));
 
       // Check for successful response - VRIO returns order_id on success
       if (response.data.order_id && response.status >= 200 && response.status < 300) {
@@ -336,24 +319,22 @@ export class VrioService {
         return null;
       }
     } catch (error) {
-      this.logger.error('Full error object:', error);
-      this.logger.error('Error response:', error.response);
-      this.logger.error('Error response data:', error.response?.data);
-      this.logger.error('Error message:', error.message);
-      
       // Better error message extraction
       let errorMessage = 'Unknown error';
       
       if (error.response?.data) {
-        this.logger.error('Response data type:', typeof error.response.data);
-        this.logger.error('Response data stringified:', JSON.stringify(error.response.data));
-        
         if (typeof error.response.data === 'string') {
           errorMessage = error.response.data;
+        } else if (error.response.data.error?.message) {
+          // Handle nested error object like { error: { code: 'order_already_completed', message: 'Order is already complete.' } }
+          errorMessage = error.response.data.error.message;
         } else if (error.response.data.message) {
           errorMessage = error.response.data.message;
         } else if (error.response.data.error) {
-          errorMessage = error.response.data.error;
+          // If error is a string or other type
+          errorMessage = typeof error.response.data.error === 'string' 
+            ? error.response.data.error 
+            : JSON.stringify(error.response.data.error);
         } else if (error.response.data.errors) {
           errorMessage = Array.isArray(error.response.data.errors) 
             ? error.response.data.errors.join(', ') 
@@ -365,11 +346,19 @@ export class VrioService {
         errorMessage = error.message;
       }
       
-      this.logger.error('Final error message:', errorMessage);
+      this.logger.error(`VRIO API Error: ${errorMessage} (Status: ${error.response?.status || 'Unknown'})`);
+      
+      // Determine appropriate HTTP status based on error
+      let httpStatus = HttpStatus.INTERNAL_SERVER_ERROR;
+      if (error.response?.status) {
+        httpStatus = error.response.status;
+      } else if (error.response?.data?.error?.code === 'order_already_completed') {
+        httpStatus = HttpStatus.CONFLICT; // 409 Conflict
+      }
       
       throw new HttpException(
         `Failed to process checkout in VRIO: ${errorMessage}`, 
-        HttpStatus.INTERNAL_SERVER_ERROR
+        httpStatus
       );
     }
   }
@@ -426,7 +415,9 @@ export class VrioService {
     
     // Always include main offer
     if (checkoutData.offers && checkoutData.offers.length > 0) {
-      const mainOffer = checkoutData.offers.find(offer => offer.type === 'MAIN');
+      const mainOffer = checkoutData.offers.find(offer => offer.type === 'MAIN' 
+        && offer.offerId === checkoutData.mainOfferId 
+        && offer.productId === checkoutData.mainProductId);
       if (mainOffer) {
         offers.push({
           offer_id: parseInt(mainOffer.offerId),
@@ -437,7 +428,9 @@ export class VrioService {
       
       // Only include bump offer if isBump is true
       if (checkoutData.isBump === '1' || checkoutData.isBump === true) {
-        const bumpOffer = checkoutData.offers.find(offer => offer.type === 'BUMP');
+        const bumpOffer = checkoutData.offers.find(offer => offer.type === 'BUMP' 
+          && offer.offerId === checkoutData.bumpOfferId 
+          && offer.productId === checkoutData.bumpProductId);
         if (bumpOffer) {
           offers.push({
             offer_id: parseInt(bumpOffer.offerId),
@@ -525,7 +518,7 @@ export class VrioService {
     console.log('VRIO upsell apiUrl', apiUrl);
 
     try {
-      this.logger.log(`Processing upsell in VRIO for customer: ${upsellData.customerId}`);
+      //this.logger.log(`Processing upsell in VRIO for customer: ${upsellData.customerId}`);
       
       // Validate required fields
       if (!upsellData.customerId) {
@@ -539,20 +532,8 @@ export class VrioService {
       // Map the data to VRIO upsell format
       const vrioPayload = this.mapToVrioUpsellFormat(upsellData);
       
-      this.logger.log(`VRIO upsell payload:`, JSON.stringify(vrioPayload, null, 2));
-      this.logger.log(`VRIO upsell API URL:`, apiUrl);
-      this.logger.log(`Input upsellData:`, JSON.stringify(upsellData, null, 2));
-      this.logger.log(`VRIO API Key configured:`, !!this.apiKey);
-      this.logger.log(`VRIO API Key (first 10 chars):`, this.apiKey ? this.apiKey.substring(0, 10) + '...' : 'NOT SET');
-      
       const authConfig = this.getAuthConfig();
-      this.logger.log(`Auth config headers:`, authConfig.headers);
-      this.logger.log(`Full upsell request config:`, {
-        url: apiUrl,
-        method: 'POST',
-        headers: authConfig.headers,
-        data: vrioPayload
-      });
+      
       
       let response: AxiosResponse<VrioApiResponse>;
       try {
@@ -560,10 +541,7 @@ export class VrioService {
           this.httpService.post<VrioApiResponse>(apiUrl, vrioPayload, authConfig)
         );
       } catch (httpError) {
-        this.logger.error('HTTP Request failed:', httpError);
-        this.logger.error('HTTP Error response:', httpError.response);
-        this.logger.error('HTTP Error status:', httpError.response?.status);
-        this.logger.error('HTTP Error data:', httpError.response?.data);
+        
         throw httpError; // Re-throw to be caught by outer catch block
       }
 
@@ -717,15 +695,6 @@ export class VrioService {
 
     this.logger.log('Final VRIO upsell payload:', JSON.stringify(vrioPayload, null, 2));
    
-    
-    // Write payload to file for debugging
-    // const fs = require('fs');
-    // const path = require('path');
-    // const payloadFile = path.join(process.cwd(), 'vrio-upsell-payload.txt');
-    // const payloadContent = `VRIO Upsell Payload - ${new Date().toISOString()}\n\n${JSON.stringify(vrioPayload, null, 2)}\n\n`;
-    // fs.appendFileSync(payloadFile, payloadContent);
-    // console.log(`Payload written to: ${payloadFile}`);
-    
     return vrioPayload;
   }
 
