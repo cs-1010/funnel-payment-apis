@@ -33,7 +33,8 @@ export class ConversionService {
       "Activity limit exceeded",
       "Pick up card - NF",
       "Pick up card - S",
-      "Issuer Declined MCC"
+      "Issuer Declined MCC",
+      "Invalid Credit Card Number REFID:580790921" // FOR TESTING
     ]
   }
 
@@ -115,6 +116,7 @@ export class ConversionService {
     
     return response;
   }
+
   async processCheckout(conversionDto: ConversionDto): Promise<any> {
 
     const offers = this.normalizeOffers(conversionDto.offers);
@@ -122,6 +124,7 @@ export class ConversionService {
      const { firstName, lastName } = this.determineNames(conversionDto);
      conversionDto.firstName = firstName;
      conversionDto.lastName = lastName;
+     conversionDto.offers = offers;
     // Check if offers are empty
     if (!offers || offers.length === 0) {
     
@@ -166,6 +169,7 @@ export class ConversionService {
         conversionDto.customerId = prospectResponse.customer_id;
         conversionDto.prevOrderId = prospectResponse.order_id;
         this.logger.log(`Prospect created successfully. Customer ID: ${prospectResponse.customer_id}, Order ID: ${prospectResponse.order_id}`);
+     
       } else {
         this.logger.error('Failed to create prospect, cannot proceed with checkout');
         await this.jobService.createJob(JobType.ERROR, {
@@ -241,49 +245,65 @@ export class ConversionService {
         }
       }
       
-      // Prepare checkout data for VRIO
-      const checkoutData = {
-        prevOrderId: conversionDto.prevOrderId,
-        customerId: conversionDto.customerId,
-        creditCardNumber: conversionDto.creditCardNumber,
-        creditCardExpiryMonth: conversionDto.creditCardExpiryMonth,
-        creditCardExpiryYear: conversionDto.creditCardExpiryYear,
-        cvc: conversionDto.cvc,
-        cardHolderName: conversionDto.cardHolderName,
-        firstName: conversionDto.firstName,
-        lastName: conversionDto.lastName,
-        billingAddress: conversionDto.billingAddress,
-        billingCity: conversionDto.billingCity,
-        billingState: conversionDto.billingState,
-        billingZip: conversionDto.billingZip,
-        billingCountry: conversionDto.billingCountry,
-        isBump: conversionDto.isBump,
-        mainOfferId: conversionDto.mainOfferId,
-        mainProductId: conversionDto.mainProductId,
-        bumpOfferId: conversionDto.bumpOfferId,
-        bumpProductId: conversionDto.bumpProductId,
-        offers: offers,
-      };
 
-      
-      // Use VRIO service for checkout
-      const response = await this.vrioService.processCheckout(checkoutData);
+      // Map to VRIO format and use VRIO service for checkout
+      const vrioPayload = this.mapToVrioCheckoutFormat(conversionDto);
+      const filteredOffers = this.filterOffers(conversionDto);
+
+      // Prepare offers for initial checkout attempt
+      const initialOffers = [filteredOffers.mainOffer];
+      if (filteredOffers.bumpOffer) {
+        initialOffers.push(filteredOffers.bumpOffer);
+      }
+
+      // Convert offers to VRIO format
+      vrioPayload.offers = this.convertOffersToVrioFormat(initialOffers);
+
+      //this.logger.log('Processing checkout with offers:', vrioPayload.offers);  
+
+      const response = await this.vrioService.processCheckout(conversionDto.prevOrderId.toString(), vrioPayload);
 
       // Comment out Sticky service call
       // const response = await this.stickyService.processNewOrder(processedData);
 
-      const queueData = this.prepareQueueData(response, conversionDto, checkoutData);
+      const queueData = this.prepareQueueData(response, conversionDto, vrioPayload);
       
+      
+
       if (response?.order_id) {
         await this.jobService.createJob(JobType.SALE, queueData);
       } else {
         await this.jobService.createJob(JobType.FAILED_SALE, queueData);
 
-        
-        if (response && this.shouldHandleFallback(response.error)) {
+        this.logger.log('response 1.', response);
+        this.logger.log('fallback offers length 2.',filteredOffers.fallbackOffers.length );
+        this.logger.log('should handle fallback 3.', this.shouldHandleFallback(response));
+      
+        // Check if we should try fallback offers
+        if (response && this.shouldHandleFallback(response) && filteredOffers.fallbackOffers.length > 0) {
+          this.logger.log(`Main offer failed, trying ${filteredOffers.fallbackOffers.length} fallback offers`);
           
-        } else {
+          const fallbackResponse = await this.handleFallbackCheckoutOffers(
+            conversionDto, 
+            vrioPayload, 
+            filteredOffers.fallbackOffers, 
+            filteredOffers.bumpOffer
+          );
           
+          if (fallbackResponse?.order_id) {
+            this.logger.log('Fallback offer succeeded');
+            const fallbackQueueData = this.prepareQueueData(fallbackResponse, conversionDto, vrioPayload);
+            await this.jobService.createJob(JobType.SALE, fallbackQueueData);
+            return {
+              ...fallbackResponse,
+              conversionType: conversionDto.conversionType,
+              firstName: firstName,
+              lastName: lastName,
+              zipCode: conversionDto.billingZip
+            };
+          } else {
+            this.logger.error('All fallback offers failed');
+          }
         }
       }
 
@@ -312,7 +332,6 @@ export class ConversionService {
 
 
   async processUpsell(conversionDto: ConversionDto): Promise<any> {
-
     const offers = this.normalizeOffers(conversionDto.offers);
     
     // Check if offers are empty
@@ -356,35 +375,49 @@ export class ConversionService {
 
     this.logger.log('Processing upsell with VRIO');
 
-    // Prepare upsell data for VRIO
-    const upsellData = {
-      customerId: conversionDto.customerId,
-      prevOrderId: conversionDto.prevOrderId,
-      cardId: conversionDto.cardId || conversionDto.creditCardId, // Prioritize cardId over creditCardId
-      creditCardId: conversionDto.creditCardId,
-      customerCardId: conversionDto.customerCardId,
-      customerBillingId: conversionDto.customerBillingId,
-      customerAdressBillingId: conversionDto.customerAdressBillingId,
-      parentOfferId: conversionDto.parentOfferId,
-      mainOfferId: conversionDto.mainOfferId,
-      mainProductId: conversionDto.mainProductId,
-      stickyCampaignId: conversionDto.stickyCampaignId,
-      lastAttribution: conversionDto.lastAttribution,
-      offers: offers,
-    };
+    // Map to VRIO format and use VRIO service for upsell
+    const vrioPayload = this.mapToVrioUpsellFormat(conversionDto);
+    const filteredOffers = this.filterOffers(conversionDto);
+
+    // Prepare offers for initial upsell attempt
+    const initialOffers = [filteredOffers.mainOffer];
+    if (filteredOffers.bumpOffer) {
+      initialOffers.push(filteredOffers.bumpOffer);
+    }
+
+    // Convert offers to VRIO format for upsell
+    vrioPayload.offers = this.convertOffersToVrioUpsellFormat(initialOffers, conversionDto);
 
     // Use VRIO service for upsell
-    const response = await this.vrioService.processUpsell(upsellData);
+    const response = await this.vrioService.processUpsell(vrioPayload);
 
-    // Comment out Sticky service call
-    // const response = await this.stickyService.processNewUpsell(processedData);
-
-    const queueData = this.prepareQueueData(response, conversionDto, upsellData);
+    const queueData = this.prepareQueueData(response, conversionDto, vrioPayload);
     
     if (response?.order_id) {
       await this.jobService.createJob(JobType.UPSELL_SALE, queueData);
     } else {
       await this.jobService.createJob(JobType.FAILED_SALE, queueData);
+
+      // Check if we should try fallback offers for upsell
+      if (response && this.shouldHandleFallback(response) && filteredOffers.fallbackOffers.length > 0) {
+        this.logger.log(`Main upsell offer failed, trying ${filteredOffers.fallbackOffers.length} fallback offers`);
+        
+        const fallbackResponse = await this.handleFallbackUpsellOffers(
+          conversionDto, 
+          vrioPayload, 
+          filteredOffers.fallbackOffers, 
+          filteredOffers.bumpOffer
+        );
+        
+        if (fallbackResponse?.order_id) {
+          this.logger.log('Fallback upsell offer succeeded');
+          const fallbackQueueData = this.prepareQueueData(fallbackResponse, conversionDto, vrioPayload);
+          await this.jobService.createJob(JobType.UPSELL_SALE, fallbackQueueData);
+          return fallbackQueueData;
+        } else {
+          this.logger.error('All fallback upsell offers failed');
+        }
+      }
     }
 
     return queueData;
@@ -409,89 +442,213 @@ export class ConversionService {
 
 
   private shouldHandleFallback(data: any): boolean {
-    return data.error
-      && this.failureReasons.findIndex(reason => reason.toLowerCase() === data.toLowerCase()) !== -1;
+    if (!data || !data.error) {
+      return false;
+    }
+    
+    const errorMessage = typeof data.error === 'string' ? data.error : data.error.message || JSON.stringify(data.error);
+    
+    return this.failureReasons.some(reason => {
+      // For REFID patterns, check if the base pattern matches (before REFID)
+      if (reason.includes('REFID:')) {
+        const basePattern = reason.split(' REFID:')[0];
+        return errorMessage.toLowerCase().includes(basePattern.toLowerCase());
+      }
+      // For other patterns, use exact match
+      return errorMessage.toLowerCase().includes(reason.toLowerCase());
+    });
   }
 
-  private async handleFallbackCheckoutOffers(convertionlDto: ConversionDto, checkoutData: any, allOffers: any[]): Promise<any> {
-    // Get fallback offers sorted by priority
-    const fallbackOffers = allOffers
-      .filter(offer => offer.type === "FALLBACK")
-      .sort((a, b) => (a.priority || 999) - (b.priority || 999));
-
-    // Get bump offers filtered by specific bumpOfferId and bumpProductId
-    const bumpOffers = allOffers.filter(offer => 
-      offer.type === "BUMP" && 
-      offer.offerId === convertionlDto.bumpOfferId && 
-      offer.productId === convertionlDto.bumpProductId
-    );
-
-    // Try each fallback offer with bump offers
+  private async handleFallbackCheckoutOffers(conversionDto: ConversionDto, vrioPayload: any, fallbackOffers: any[], bumpOffer: any): Promise<any> {
+    // Try each fallback offer with bump offer if enabled
     for (const fallbackOffer of fallbackOffers) {
       try {
-        // Create new checkout data with fallback offer + bump offers
+        this.logger.log(`Trying fallback offer with priority ${fallbackOffer.priority}: ${fallbackOffer.productName}`);
+        
+        // Prepare offers for this fallback attempt
+        const offersToTry = [fallbackOffer];
+        if (bumpOffer) {
+          offersToTry.push(bumpOffer);
+        }
 
-        checkoutData.campaignId = fallbackOffer.campaignId;
-        const fallbackCheckoutData = {
-          ...checkoutData,
-          offers: this.transformOffersForCheckout([fallbackOffer, ...bumpOffers])
+        const campaignId = fallbackOffer.campaignId;
+        
+        // Convert offers to VRIO format
+        const vrioOffers = this.convertOffersToVrioFormat(offersToTry);
+        
+        // Create new VRIO payload with fallback offer
+        const fallbackVrioPayload = {
+          ...vrioPayload,
+          force_campaign_id: true,
+          campaign_id: campaignId,
+          offers: vrioOffers
         };
 
-        const response = await this.stickyService.processNewOrder(fallbackCheckoutData);
+        const response = await this.vrioService.processCheckout(conversionDto.prevOrderId?.toString() || '', fallbackVrioPayload);
         
-        if (response.response_code === "100") {
-         
-          return { ...response, isFallback: true, fallbackPriority: fallbackOffer.priority };
+        if (response?.order_id) {
+          this.logger.log(`Fallback offer successful with priority ${fallbackOffer.priority}`);
+          return { 
+            ...response, 
+            isFallback: true, 
+            fallbackPriority: fallbackOffer.priority,
+            fallbackProductName: fallbackOffer.productName
+          };
+        } else {
+          // Fallback offer failed - check if we should continue with next fallback
+          if (response && this.shouldHandleFallback(response)) {
+            this.logger.log(`Fallback offer ${fallbackOffer.priority} failed with recoverable error, trying next fallback`);
+            
+            // Log FAILED_SALE job for this failed fallback attempt
+            const fallbackQueueData = this.prepareQueueData(response, conversionDto, fallbackVrioPayload);
+            await this.jobService.createJob(JobType.FAILED_SALE, {
+              ...fallbackQueueData,
+              isFallback: true,
+              fallbackPriority: fallbackOffer.priority,
+              fallbackProductName: fallbackOffer.productName
+            });
+            
+            continue; // Try next fallback offer
+          } else {
+            this.logger.log(`Fallback offer ${fallbackOffer.priority} failed with non-recoverable error, stopping fallback attempts`);
+            
+            // Log FAILED_SALE job for this failed fallback attempt
+            const fallbackQueueData = this.prepareQueueData(response, conversionDto, fallbackVrioPayload);
+            await this.jobService.createJob(JobType.FAILED_SALE, {
+              ...fallbackQueueData,
+              isFallback: true,
+              fallbackPriority: fallbackOffer.priority,
+              fallbackProductName: fallbackOffer.productName
+            });
+            
+            // Stop trying more fallback offers
+            break;
+          }
         }
         
       } catch (error) {
-        console.error(`Error processing fallback offer with priority ${fallbackOffer.priority}:`, error);
+        this.logger.error(`Error processing fallback offer with priority ${fallbackOffer.priority}:`, error);
+        
+        // Log FAILED_SALE job for this failed fallback attempt due to exception
+        const errorResponse = {
+          error: error.message || 'Unknown error',
+          payment_failed: true
+        };
+        const fallbackQueueData = this.prepareQueueData(errorResponse, conversionDto, vrioPayload);
+        await this.jobService.createJob(JobType.FAILED_SALE, {
+          ...fallbackQueueData,
+          isFallback: true,
+          fallbackPriority: fallbackOffer.priority,
+          fallbackProductName: fallbackOffer.productName
+        });
+        
         continue; // Try next fallback offer
       }
     }
 
     // If all fallback offers failed, return the last error
-   // console.log('All fallback offers failed');
-    const failedData = { error_message: 'All fallback offers failed', isFallback: true };
-   
-    return failedData;
+    this.logger.error('All fallback offers failed');
+    return { 
+      error_message: 'All fallback offers failed', 
+      isFallback: true,
+      payment_failed: true
+    };
   }
 
-  private async handleFallbackUpsellOffers(convertionlDto: ConversionDto, checkoutData: any, allOffers: any[]): Promise<any> {
-    // Get fallback offers sorted by priority
-    const fallbackOffers = allOffers
-      .filter(offer => offer.type === "FALLBACK")
-      .sort((a, b) => (a.priority || 999) - (b.priority || 999));
- 
-    // Try each fallback offer with bump offers
+  private async handleFallbackUpsellOffers(conversionDto: ConversionDto, vrioPayload: any, fallbackOffers: any[], bumpOffer: any): Promise<any> {
+    // Try each fallback offer with bump offer if enabled
     for (const fallbackOffer of fallbackOffers) {
       try {
-        // Create new checkout data with fallback offer + bump offers
+        this.logger.log(`Trying fallback upsell offer with priority ${fallbackOffer.priority}: ${fallbackOffer.productName}`);
+        
+        // Prepare offers for this fallback attempt
+        const offersToTry = [fallbackOffer];
+        if (bumpOffer) {
+          offersToTry.push(bumpOffer);
+        }
 
-        checkoutData.campaignId = fallbackOffer.campaignId;
-        const fallbackCheckoutData = {
-          ...checkoutData,
-          offers: this.transformOffersForCheckout([fallbackOffer])
+        const campaignId = fallbackOffer.campaignId;
+        
+        // Convert offers to VRIO upsell format
+        const vrioOffers = this.convertOffersToVrioUpsellFormat(offersToTry, conversionDto);
+        
+        // Create new VRIO payload with fallback offer
+        const fallbackVrioPayload = {
+          ...vrioPayload,
+          force_campaign_id: true,
+          campaign_id: campaignId,
+          offers: vrioOffers
         };
 
-        const response = await this.stickyService.processNewUpsell(fallbackCheckoutData);
+        const response = await this.vrioService.processUpsell(fallbackVrioPayload);
         
-        if (response.response_code === "100") {
-         
-          return { ...response, isFallback: true, fallbackPriority: fallbackOffer.priority };
+        if (response?.order_id) {
+          this.logger.log(`Fallback upsell offer successful with priority ${fallbackOffer.priority}`);
+          return { 
+            ...response, 
+            isFallback: true, 
+            fallbackPriority: fallbackOffer.priority,
+            fallbackProductName: fallbackOffer.productName
+          };
+        } else {
+          // Fallback offer failed - check if we should continue with next fallback
+          if (response && this.shouldHandleFallback(response)) {
+            this.logger.log(`Fallback upsell offer ${fallbackOffer.priority} failed with recoverable error, trying next fallback`);
+            
+            // Log FAILED_SALE job for this failed fallback attempt
+            const fallbackQueueData = this.prepareQueueData(response, conversionDto, fallbackVrioPayload);
+            await this.jobService.createJob(JobType.FAILED_SALE, {
+              ...fallbackQueueData,
+              isFallback: true,
+              fallbackPriority: fallbackOffer.priority,
+              fallbackProductName: fallbackOffer.productName
+            });
+            
+            continue; // Try next fallback offer
+          } else {
+            this.logger.log(`Fallback upsell offer ${fallbackOffer.priority} failed with non-recoverable error, stopping fallback attempts`);
+            
+            // Log FAILED_SALE job for this failed fallback attempt
+            const fallbackQueueData = this.prepareQueueData(response, conversionDto, fallbackVrioPayload);
+            await this.jobService.createJob(JobType.FAILED_SALE, {
+              ...fallbackQueueData,
+              isFallback: true,
+              fallbackPriority: fallbackOffer.priority,
+              fallbackProductName: fallbackOffer.productName
+            });
+            
+            // Stop trying more fallback offers
+            break;
+          }
         }
         
       } catch (error) {
-        console.error(`Error processing fallback offer with priority ${fallbackOffer.priority}:`, error);
+        this.logger.error(`Error processing fallback upsell offer with priority ${fallbackOffer.priority}:`, error);
+        
+        // Log FAILED_SALE job for this failed fallback attempt due to exception
+        const errorResponse = {
+          error: error.message || 'Unknown error',
+          payment_failed: true
+        };
+        const fallbackQueueData = this.prepareQueueData(errorResponse, conversionDto, vrioPayload);
+        await this.jobService.createJob(JobType.FAILED_SALE, {
+          ...fallbackQueueData,
+          isFallback: true,
+          fallbackPriority: fallbackOffer.priority,
+          fallbackProductName: fallbackOffer.productName
+        });
+        
         continue; // Try next fallback offer
       }
     }
 
     // If all fallback offers failed, return the last error
-   // console.log('All fallback offers failed');
-    const failedData = { error_message: 'All fallback offers failed', isFallback: true };
-   
-    return failedData;
+    this.logger.error('All fallback upsell offers failed');
+    return { 
+      error_message: 'All fallback upsell offers failed', 
+      isFallback: true,
+      payment_failed: true
+    };
   }
 
   private transformOffersForCheckout(offers: any[]): any[] {
@@ -561,18 +718,19 @@ export class ConversionService {
     // Create a sanitized version of checkoutData without sensitive data
     const sanitizedCheckoutData = { ...checkoutData };
     
+    
     // Mask credit card number in checkout data
-    if (sanitizedCheckoutData.creditCardNumber) {
-      const cardNumber = sanitizedCheckoutData.creditCardNumber.replace(/\s/g, '');
-      sanitizedCheckoutData.creditCardNumber = cardNumber.length >= 4 
+    if (sanitizedCheckoutData.card_number) {
+      const cardNumber = sanitizedCheckoutData.card_number.replace(/\s/g, '');
+      sanitizedCheckoutData.card_number = cardNumber.length >= 4 
         ? `****${cardNumber.slice(-4)}` 
         : '****';
     }
     
     // Remove sensitive fields from checkout data
-    delete sanitizedCheckoutData.creditCardExpiryMonth;
-    delete sanitizedCheckoutData.creditCardExpiryYear;
-    delete sanitizedCheckoutData.cvc;
+    delete sanitizedCheckoutData.card_exp_month;
+    delete sanitizedCheckoutData.card_exp_year;
+    delete sanitizedCheckoutData.card_cvv;
     
     return {
       ...responseData,
@@ -824,6 +982,177 @@ export class ConversionService {
     }
 
     return this.shippingId; // default free shipping
+  }
+
+  /**
+   * Map checkout data to VRIO checkout format
+   */
+  private mapToVrioCheckoutFormat(checkoutData: any): any {
+    // Determine first and last names using shared logic
+    const { firstName, lastName } = this.determineNames(checkoutData);
+
+    const vrioPayload: any = {
+      connection_id: 1,
+      payment_method_id: 1,
+      card_number: checkoutData.creditCardNumber,
+      card_type_id: this.getCardTypeId(checkoutData.creditCardNumber),
+      card_cvv: checkoutData.cvc,
+      card_exp_month: parseInt(checkoutData.creditCardExpiryMonth),
+      card_exp_year: parseInt(checkoutData.creditCardExpiryYear),
+      customer_id: checkoutData.customerId,
+      bill_fname: firstName,
+      bill_lname: lastName,
+      bill_address1: checkoutData.billingAddress || 'not available',
+      bill_city: checkoutData.billingCity || 'not available',
+      bill_country: 'US', // Default to US
+      bill_state: checkoutData.billingState || 'CA',
+      bill_zipcode: checkoutData.billingZip || 'not available',
+    };
+
+    // Map offers - only include bump offer if isBump is true
+    
+    return vrioPayload;
+  }
+
+  /**
+   * Map upsell data to VRIO upsell format
+   */
+  private mapToVrioUpsellFormat(conversionDto: ConversionDto): any {
+    const vrioPayload: any = {
+      connection_id: 1,
+      campaign_id: conversionDto.stickyCampaignId || 2,
+      customer_id: conversionDto.customerId,
+      customers_address_billing_id: conversionDto.customerAdressBillingId || conversionDto.customerBillingId || conversionDto.customerId,
+      customer_card_id: conversionDto.cardId || conversionDto.customerCardId || conversionDto.creditCardId,
+      action: "process",
+      payment_method_id: 1,
+    };
+
+    // Map tracking fields from lastAttribution
+    if (conversionDto.lastAttribution) {
+      const attr = conversionDto.lastAttribution;
+      
+      // tracking1: utm_campaign
+      if (attr.utm_campaign) {
+        vrioPayload.tracking1 = attr.utm_campaign;
+      }
+      
+      // tracking2: utm_source
+      if (attr.utm_source) {
+        vrioPayload.tracking2 = attr.utm_source;
+      }
+      
+      // tracking3: h_ad_id
+      if (attr.h_ad_id) {
+        vrioPayload.tracking3 = attr.h_ad_id;
+      }
+      
+      // tracking4: adid
+      if (attr.adid) {
+        vrioPayload.tracking4 = attr.adid;
+      }
+      
+      // tracking5: gc_id
+      if (attr.gc_id) {
+        vrioPayload.tracking5 = attr.gc_id;
+      }
+      
+      // tracking6: campaign_id
+      if (attr.campaign_id) {
+        vrioPayload.tracking6 = attr.campaign_id;
+      }
+    }
+
+    return vrioPayload;
+  }
+
+  private filterOffers(checkoutData: any): any {
+    let mainOffer: any = null;
+    let bumpOffer: any = null;
+    let fallbackOffers: any[] = [];
+    
+    if (checkoutData.offers && checkoutData.offers.length > 0) {
+      // Find and process main offer
+      mainOffer = checkoutData.offers.find((offer: any) =>
+        offer.type === 'MAIN' &&
+        offer.offerId === checkoutData.mainOfferId &&
+        offer.productId === checkoutData.mainProductId
+      );
+
+      // Extract fallback offers from the main offer
+      if (mainOffer && mainOffer.fallbackOffers && Array.isArray(mainOffer.fallbackOffers)) {
+        fallbackOffers = mainOffer.fallbackOffers
+          .filter((fallback: any) => !fallback.isArchived)
+          .sort((a: any, b: any) => (a.priority || 999) - (b.priority || 999));
+      }
+     
+      // Process bump offer if enabled
+      const isBumpEnabled = checkoutData.isBump === '1' || 
+                            checkoutData.isBump === true || 
+                            checkoutData.isBump === 1;
+  
+      if (isBumpEnabled) {
+        bumpOffer = checkoutData.offers.find((offer: any) =>
+          offer.type === 'BUMP' &&
+          offer.offerId === checkoutData.bumpOfferId &&
+          offer.productId === checkoutData.bumpProductId
+        );
+      }
+    }
+  
+    return {
+      mainOffer: mainOffer,
+      bumpOffer: bumpOffer,
+      fallbackOffers: fallbackOffers
+    };
+  }
+
+  /**
+   * Convert offers to VRIO API format
+   */
+  private convertOffersToVrioFormat(offers: any[]): any[] {
+    return offers.map(offer => ({
+      offer_id: parseInt(offer.offerId),
+      order_offer_quantity: offer.quantity || 1,
+      item_id: parseInt(offer.productId)
+    }));
+  }
+
+  /**
+   * Convert offers to VRIO upsell format
+   */
+  private convertOffersToVrioUpsellFormat(offers: any[], conversionDto: ConversionDto): any[] {
+    return offers.map(offer => ({
+      offer_id: parseInt(offer.offerId),
+      order_offer_quantity: offer.quantity || 1,
+      item_id: parseInt(offer.productId),
+      order_offer_upsell: true,
+      parent_offer_id: conversionDto.parentOfferId,
+      parent_order_id: conversionDto.prevOrderId
+    }));
+  }
+
+  /**
+   * Get card type ID for VRIO
+   * 1 - Mastercard
+   * 2 - Visa
+   * 3 - Discover
+   * 4 - American Express
+   * 5 - Digital Wallet
+   * 6 - ACH
+   */
+  private getCardTypeId(cardNumber: string): number {
+    const cardType = this.getCardType(cardNumber);
+    const cardTypeMap = {
+      'master': 1,      // Mastercard
+      'visa': 2,        // Visa
+      'discover': 3,    // Discover
+      'amex': 4,        // American Express
+      'digital_wallet': 5, // Digital Wallet
+      'ach': 6,         // ACH
+      'unknown': 2      // Default to Visa
+    };
+    return cardTypeMap[cardType] || 2;
   }
 
   /**

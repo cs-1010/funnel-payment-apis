@@ -308,23 +308,21 @@ export class VrioService {
   /**
    * Process checkout for existing customer in VRIO
    */
-  async processCheckout(checkoutData: any): Promise<VrioApiResponse | null> {
-    const apiUrl = `${this.apiUrl}/orders/${checkoutData.prevOrderId}/process`;
+  async processCheckout(prevOrderId: string, vrioPayload: any): Promise<VrioApiResponse | null> {
+    const apiUrl = `${this.apiUrl}/orders/${prevOrderId}/process`;
     
-    
+  
     try {
-
+ 
       // Validate required fields
-      if (!checkoutData.prevOrderId) {
+      if (!prevOrderId) {
         throw new Error('Previous order ID is required for VRIO checkout');
       }
       
-      if (!checkoutData.customerId) {
+      if (!vrioPayload.customer_id) {
         throw new Error('Customer ID is required for VRIO checkout');
       }
       
-      // Map the data to VRIO checkout format
-      const vrioPayload = this.mapToVrioCheckoutFormat(checkoutData);
       const authConfig = this.getAuthConfig();
 
       
@@ -451,66 +449,6 @@ export class VrioService {
     }
   }
 
-  /**
-   * Map checkout data to VRIO checkout format
-   */
-  private mapToVrioCheckoutFormat(checkoutData: any): any {
-    // Determine first and last names using shared logic
-    const { firstName, lastName } = this.determineNames(checkoutData);
-
-    const vrioPayload: any = {
-      connection_id: 1,
-      payment_method_id: 1,
-      card_number: checkoutData.creditCardNumber,
-      card_type_id: this.getCardTypeId(checkoutData.creditCardNumber),
-      card_cvv: checkoutData.cvc,
-      card_exp_month: parseInt(checkoutData.creditCardExpiryMonth),
-      card_exp_year: parseInt(checkoutData.creditCardExpiryYear),
-      customer_id: checkoutData.customerId,
-      bill_fname: firstName,
-      bill_lname: lastName,
-      bill_address1: checkoutData.billingAddress || 'not available',
-      bill_city: checkoutData.billingCity || 'not available',
-      bill_country: 'US', // Default to US
-      bill_state: checkoutData.billingState || 'CA',
-      bill_zipcode: checkoutData.billingZip || 'not available',
-    };
-
-    // Map offers - only include bump offer if isBump is true
-    const offers: any[] = [];
-    
-    // Always include main offer
-    if (checkoutData.offers && checkoutData.offers.length > 0) {
-      const mainOffer = checkoutData.offers.find(offer => offer.type === 'MAIN' 
-        && offer.offerId === checkoutData.mainOfferId 
-        && offer.productId === checkoutData.mainProductId);
-      if (mainOffer) {
-        offers.push({
-          offer_id: parseInt(mainOffer.offerId),
-          order_offer_quantity: mainOffer.quantity || 1,
-          item_id: parseInt(mainOffer.productId)
-        });
-      }
-      
-      // Only include bump offer if isBump is true
-      if (checkoutData.isBump === '1' || checkoutData.isBump === true || checkoutData.isBump === 1) {
-        const bumpOffer = checkoutData.offers.find(offer => offer.type === 'BUMP' 
-          && offer.offerId === checkoutData.bumpOfferId 
-          && offer.productId === checkoutData.bumpProductId);
-        if (bumpOffer) {
-          offers.push({
-            offer_id: parseInt(bumpOffer.offerId),
-            order_offer_quantity: bumpOffer.quantity || 1,
-            item_id: parseInt(bumpOffer.productId)
-          });
-        }
-      }
-    }
-    
-    vrioPayload.offers = offers;
-
-    return vrioPayload;
-  }
 
   /**
    * Get card type ID for VRIO
@@ -719,6 +657,13 @@ export class VrioService {
    * Map upsell data to VRIO upsell format
    */
   private mapToVrioUpsellFormat(upsellData: any): any {
+    // If the data is already in VRIO format (from conversion service), return it directly
+    if (upsellData.connection_id && upsellData.customer_id && upsellData.offers) {
+      this.logger.log('Using pre-formatted VRIO upsell payload from conversion service');
+      return upsellData;
+    }
+
+    // Legacy fallback logic for backward compatibility
     const vrioPayload: any = {
       connection_id: 1,
       campaign_id: upsellData.stickyCampaignId || 2,
@@ -764,54 +709,59 @@ export class VrioService {
       }
     }
 
-    // Map offers - simplified format for upsell
-    const offers: any[] = [];
-    
-    // For upsell, use mainOfferId for offer_id and parentOfferId for parent_offer_id
-    if (upsellData.mainOfferId && upsellData.parentOfferId) {
-      offers.push({
-        offer_id: parseInt(upsellData.mainOfferId.toString()),
-        order_offer_quantity: 1, // Default quantity, can be adjusted if needed
-        item_id: parseInt(upsellData.mainProductId || '1'), // Use mainProductId as item_id
-        order_offer_upsell: true,
-        parent_offer_id: upsellData.parentOfferId,
-        parent_order_id: upsellData.prevOrderId
-      });
-    } else if (upsellData.offers && upsellData.offers.length > 0) {
-      // Fallback: Find the main offer based on mainOfferId and mainProductId
-      const mainOffer = upsellData.offers.find(offer => 
-        offer.offerId == upsellData.mainOfferId && 
-        offer.productId == upsellData.mainProductId &&
-        offer.type === 'MAIN'
-      );
+    // Map offers - use pre-formatted offers if available, otherwise fallback to legacy logic
+    if (upsellData.vrioOffers && Array.isArray(upsellData.vrioOffers)) {
+      // Use the pre-formatted offers from the conversion service
+      vrioPayload.offers = upsellData.vrioOffers;
+    } else {
+      // Legacy fallback logic for backward compatibility
+      const offers: any[] = [];
       
-      if (mainOffer) {
+      // For upsell, use mainOfferId for offer_id and parentOfferId for parent_offer_id
+      if (upsellData.mainOfferId && upsellData.parentOfferId) {
         offers.push({
-          offer_id: parseInt(mainOffer.offerId),
-          order_offer_quantity: mainOffer.quantity || 1,
-          item_id: parseInt(mainOffer.productId || upsellData.mainProductId || '1'),
-          order_offer_upsell:true,
-          parent_offer_id:upsellData.parentOfferId,
-            parent_order_id:upsellData.preOrderId
+          offer_id: parseInt(upsellData.mainOfferId.toString()),
+          order_offer_quantity: 1, // Default quantity, can be adjusted if needed
+          item_id: parseInt(upsellData.mainProductId || '1'), // Use mainProductId as item_id
+          order_offer_upsell: true,
+          parent_offer_id: upsellData.parentOfferId,
+          parent_order_id: upsellData.prevOrderId
         });
-      } else {
-        // Fallback: use the first MAIN offer if specific main offer not found
-        const fallbackMainOffer = upsellData.offers.find(offer => offer.type === 'MAIN');
-        if (fallbackMainOffer) {
+      } else if (upsellData.offers && upsellData.offers.length > 0) {
+        // Fallback: Find the main offer based on mainOfferId and mainProductId
+        const mainOffer = upsellData.offers.find(offer => 
+          offer.offerId == upsellData.mainOfferId && 
+          offer.productId == upsellData.mainProductId &&
+          offer.type === 'MAIN'
+        );
+        
+        if (mainOffer) {
           offers.push({
-            offer_id: parseInt(fallbackMainOffer.offerId),
-            order_offer_quantity: fallbackMainOffer.quantity || 1,
-            item_id: parseInt(fallbackMainOffer.productId || upsellData.mainProductId || '1'),
+            offer_id: parseInt(mainOffer.offerId),
+            order_offer_quantity: mainOffer.quantity || 1,
+            item_id: parseInt(mainOffer.productId || upsellData.mainProductId || '1'),
             order_offer_upsell:true,
             parent_offer_id:upsellData.parentOfferId,
             parent_order_id:upsellData.prevOrderId
-            
           });
+        } else {
+          // Fallback: use the first MAIN offer if specific main offer not found
+          const fallbackMainOffer = upsellData.offers.find(offer => offer.type === 'MAIN');
+          if (fallbackMainOffer) {
+            offers.push({
+              offer_id: parseInt(fallbackMainOffer.offerId),
+              order_offer_quantity: fallbackMainOffer.quantity || 1,
+              item_id: parseInt(fallbackMainOffer.productId || upsellData.mainProductId || '1'),
+              order_offer_upsell:true,
+              parent_offer_id:upsellData.parentOfferId,
+              parent_order_id:upsellData.prevOrderId
+            });
+          }
         }
       }
+      
+      vrioPayload.offers = offers;
     }
-    
-    vrioPayload.offers = offers;
 
     this.logger.log('Final VRIO upsell payload:', JSON.stringify(vrioPayload, null, 2));
    

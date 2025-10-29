@@ -27,41 +27,7 @@ export class ConversionController {
         return await this.vrioService.testConnection();
     }
 
-    @Post('test-checkout')
-    async testCheckout(@Body() testData: any) {
-        // Test checkout with sample data
-        const sampleCheckoutData = {
-            prevOrderId: testData.prevOrderId || 1010,
-            customerId: testData.customerId || 1006,
-            creditCardNumber: testData.creditCardNumber || "4444333322225332",
-            creditCardExpiryMonth: testData.creditCardExpiryMonth || "08",
-            creditCardExpiryYear: testData.creditCardExpiryYear || "2028",
-            cvc: testData.cvc || "123",
-            cardHolderName: testData.cardHolderName || "Test Card",
-            billingAddress: testData.billingAddress || "12345 Bissonnet Street",
-            billingCity: testData.billingCity || "Houston",
-            billingState: testData.billingState || "TX",
-            billingZip: testData.billingZip || "77099",
-            isBump: testData.isBump || "1",
-            offers: testData.offers || [
-                {
-                    type: "MAIN",
-                    offerId: "6",
-                    productId: "1",
-                    quantity: 1
-                },
-                {
-                    type: "BUMP",
-                    offerId: "4",
-                    productId: "3",
-                    quantity: 1
-                }
-            ]
-        };
-        
-        return await this.vrioService.processCheckout(sampleCheckoutData);
-    }
-
+    
     @Post('test-upsell')
     async testUpsell(@Body() testData: any) {
         // Test upsell with sample data
