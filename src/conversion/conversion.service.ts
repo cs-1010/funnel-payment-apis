@@ -347,7 +347,8 @@ export class ConversionService {
         nodeId : conversionDto?.ftNodeId,
         visitorId: conversionDto.visitorId,
         ipAddress: conversionDto.ipAddress,
-        accountId: conversionDto.accountId
+        accountId: conversionDto.accountId,
+        postedPayload: conversionDto
       });
 
       return { error_message: 'Payment failed, please contact support', error_found:"1" };    
@@ -361,7 +362,8 @@ export class ConversionService {
         nodeId: conversionDto?.ftNodeId,
         visitorId: conversionDto.visitorId,
         ipAddress: conversionDto.ipAddress,
-        accountId: conversionDto.accountId
+        accountId: conversionDto.accountId,
+        postedPayload: conversionDto
       });
       return { error_message: 'Customer ID is required for upsell', error_found: "1" };
     }
