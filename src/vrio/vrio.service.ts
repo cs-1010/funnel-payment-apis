@@ -525,13 +525,13 @@ export class VrioService {
       //this.logger.log(`Processing upsell in VRIO for customer: ${upsellData.customerId}`);
       
       // Validate required fields
-      if (!upsellData.customerId) {
+      if (!upsellData.customer_id) {
         throw new Error('Customer ID is required for VRIO upsell');
       }
       
-      if (!upsellData.prevOrderId) {
+      /*if (!upsellData.offers.) {
         throw new Error('Previous order ID is required for VRIO upsell');
-      }
+      }*/
       
       // Map the data to VRIO upsell format
       const vrioPayload = this.mapToVrioUpsellFormat(upsellData);

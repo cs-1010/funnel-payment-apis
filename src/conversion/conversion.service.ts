@@ -250,10 +250,15 @@ export class ConversionService {
       const vrioPayload = this.mapToVrioCheckoutFormat(conversionDto);
       const filteredOffers = this.filterOffers(conversionDto);
 
-      // Prepare offers for initial checkout attempt
-      const initialOffers = [filteredOffers.mainOffer];
-      if (filteredOffers.bumpOffer) {
-        initialOffers.push(filteredOffers.bumpOffer);
+      // Prepare offers for initial checkout attempt (defensive)
+      const initialOffers = [filteredOffers.mainOffer, filteredOffers.bumpOffer].filter(Boolean);
+      if (initialOffers.length === 0) {
+        const noOfferQueue = this.prepareQueueData({
+          error: 'No valid offers found after filtering',
+          payment_failed: true
+        }, conversionDto, vrioPayload);
+        await this.jobService.createJob(JobType.ERROR, noOfferQueue);
+        return { error_message: 'Payment failed, please contact support', error_found: '1' };
       }
 
       // Convert offers to VRIO format
@@ -375,19 +380,30 @@ export class ConversionService {
 
     this.logger.log('Processing upsell with VRIO');
 
+  
     // Map to VRIO format and use VRIO service for upsell
     const vrioPayload = this.mapToVrioUpsellFormat(conversionDto);
+
+    
     const filteredOffers = this.filterOffers(conversionDto);
 
-    // Prepare offers for initial upsell attempt
-    const initialOffers = [filteredOffers.mainOffer];
-    if (filteredOffers.bumpOffer) {
-      initialOffers.push(filteredOffers.bumpOffer);
+    //return conversionDto;
+    // Prepare offers for initial upsell attempt (defensive)
+    const initialOffers = [filteredOffers.mainOffer, filteredOffers.bumpOffer].filter(Boolean);
+    if (initialOffers.length === 0) {
+      const noOfferQueue = this.prepareQueueData({
+        error: 'No valid upsell offers found after filtering',
+        payment_failed: true
+      }, conversionDto, vrioPayload);
+      await this.jobService.createJob(JobType.ERROR, noOfferQueue);
+      return { error_message: 'Payment failed, please contact support', error_found: '1' };
     }
 
     // Convert offers to VRIO format for upsell
     vrioPayload.offers = this.convertOffersToVrioUpsellFormat(initialOffers, conversionDto);
 
+    
+    
     // Use VRIO service for upsell
     const response = await this.vrioService.processUpsell(vrioPayload);
 
@@ -580,6 +596,7 @@ export class ConversionService {
           offers: vrioOffers
         };
 
+        
         const response = await this.vrioService.processUpsell(fallbackVrioPayload);
         
         if (response?.order_id) {
@@ -1111,25 +1128,29 @@ export class ConversionService {
    * Convert offers to VRIO API format
    */
   private convertOffersToVrioFormat(offers: any[]): any[] {
-    return offers.map(offer => ({
-      offer_id: parseInt(offer.offerId),
-      order_offer_quantity: offer.quantity || 1,
-      item_id: parseInt(offer.productId)
-    }));
+    return offers
+      .filter(offer => offer && offer.offerId != null && offer.productId != null)
+      .map(offer => ({
+        offer_id: parseInt(offer.offerId?.toString()),
+        order_offer_quantity: offer.quantity || 1,
+        item_id: parseInt(offer.productId?.toString())
+      }));
   }
 
   /**
    * Convert offers to VRIO upsell format
    */
   private convertOffersToVrioUpsellFormat(offers: any[], conversionDto: ConversionDto): any[] {
-    return offers.map(offer => ({
-      offer_id: parseInt(offer.offerId),
-      order_offer_quantity: offer.quantity || 1,
-      item_id: parseInt(offer.productId),
-      order_offer_upsell: true,
-      parent_offer_id: conversionDto.parentOfferId,
-      parent_order_id: conversionDto.prevOrderId
-    }));
+    return offers
+      .filter(offer => offer && offer.offerId != null && offer.productId != null)
+      .map(offer => ({
+        offer_id: parseInt(offer.offerId?.toString()),
+        order_offer_quantity: offer.quantity || 1,
+        item_id: parseInt(offer.productId?.toString()),
+        order_offer_upsell: true,
+        parent_offer_id: conversionDto.parentOfferId,
+        parent_order_id: conversionDto.prevOrderId
+      }));
   }
 
   /**
