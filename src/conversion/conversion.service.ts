@@ -34,7 +34,6 @@ export class ConversionService {
       "Pick up card - NF",
       "Pick up card - S",
       "Issuer Declined MCC",
-      "Invalid Credit Card Number REFID:580790921" // FOR TESTING
     ]
   }
 
@@ -169,6 +168,14 @@ export class ConversionService {
         conversionDto.customerId = prospectResponse.customer_id;
         conversionDto.prevOrderId = prospectResponse.order_id;
         this.logger.log(`Prospect created successfully. Customer ID: ${prospectResponse.customer_id}, Order ID: ${prospectResponse.order_id}`);
+        
+        // Create SIGNUP job for successful prospect creation (same as processSignup)
+        const prospectQueueData = this.prepareQueueData(prospectResponse, conversionDto, processedProspectData);
+        if (prospectResponse?.order_id && prospectResponse?.customer_id) {
+          await this.jobService.createJob(JobType.SIGNUP, prospectQueueData);
+        } else {
+          await this.jobService.createJob(JobType.FAILED_SIGNUP, prospectQueueData);
+        }
      
       } else {
         this.logger.error('Failed to create prospect, cannot proceed with checkout');
@@ -212,6 +219,14 @@ export class ConversionService {
         // Now proceed with checkout using the created customer
         conversionDto.customerId = prospectResponse.customer_id;
         this.logger.log(`Prospect created successfully. Customer ID: ${prospectResponse.customer_id}, using existing Order ID: ${conversionDto.prevOrderId}`);
+        
+        // Create SIGNUP job for successful prospect creation (same as processSignup)
+        const prospectQueueData = this.prepareQueueData(prospectResponse, conversionDto, processedProspectData);
+        if (prospectResponse?.order_id && prospectResponse?.customer_id) {
+          await this.jobService.createJob(JobType.SIGNUP, prospectQueueData);
+        } else {
+          await this.jobService.createJob(JobType.FAILED_SIGNUP, prospectQueueData);
+        }
       } else {
         this.logger.error('Failed to create prospect, cannot proceed with checkout');
         await this.jobService.createJob(JobType.ERROR, {
@@ -375,7 +390,8 @@ export class ConversionService {
         nodeId: conversionDto?.ftNodeId,
         visitorId: conversionDto.visitorId,
         ipAddress: conversionDto.ipAddress,
-        accountId: conversionDto.accountId
+        accountId: conversionDto.accountId,
+        postedPayload: conversionDto
       });
       return { error_message: 'Previous order ID is required for upsell', error_found: "1" };
     }
