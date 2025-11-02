@@ -117,7 +117,8 @@ export class ConversionService {
   }
 
   async processCheckout(conversionDto: ConversionDto): Promise<any> {
-
+    
+    
     const offers = this.normalizeOffers(conversionDto.offers);
      // Determine first and last names for response
      const { firstName, lastName } = this.determineNames(conversionDto);
@@ -133,7 +134,8 @@ export class ConversionService {
         nodeId : conversionDto?.ftNodeId,
         visitorId: conversionDto.visitorId,
         ipAddress: conversionDto.ipAddress,
-        accountId: conversionDto.accountId
+        accountId: conversionDto.accountId,
+        postedPayload: conversionDto
       });
 
       return { error_message: 'Payment failed, please contact support', error_found:"1" };    

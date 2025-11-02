@@ -364,5 +364,9 @@ export class ConversionDto {
   @IsOptional()
   @IsString()
   referrer?:string
+
+  @IsOptional()
+  @IsString()
+  nodePath?:string
   
 }
