@@ -302,7 +302,7 @@ export class ConversionService {
         this.logger.log('should handle fallback 3.', this.shouldHandleFallback(response));
       
         // Check if we should try fallback offers
-        if (response && this.shouldHandleFallback(response) && filteredOffers.fallbackOffers.length > 0) {
+        if (response && this.shouldHandleFallback(response) && filteredOffers.fallbackOffers.length > 10) {
           this.logger.log(`Main offer failed, trying ${filteredOffers.fallbackOffers.length} fallback offers`);
           
           const fallbackResponse = await this.handleFallbackCheckoutOffers(
@@ -629,7 +629,7 @@ export class ConversionService {
           };
         } else {
           // Fallback offer failed - check if we should continue with next fallback
-          if (response && this.shouldHandleFallback(response)) {
+          if (response && this.shouldHandleFallback(response) ) {
             this.logger.log(`Fallback upsell offer ${fallbackOffer.priority} failed with recoverable error, trying next fallback`);
             
             // Log FAILED_SALE job for this failed fallback attempt
