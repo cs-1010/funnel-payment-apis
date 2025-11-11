@@ -368,5 +368,9 @@ export class ConversionDto {
   @IsOptional()
   @IsString()
   nodePath?:string
+
+  @IsOptional()
+  @IsString()
+  shippingProfileId?:string
   
 }

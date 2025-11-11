@@ -28,12 +28,11 @@ export class ConversionService {
     this.shippingId = 2; // Default value, as free shipping
     this.failureReasons = [
       "Insufficient Funds",
-      "Do Not Honor",
-      "This transaction has been declined",
+     /* "This transaction has been declined",
       "Activity limit exceeded",
       "Pick up card - NF",
       "Pick up card - S",
-      "Issuer Declined MCC",
+      "Issuer Declined MCC",*/
     ]
   }
 
@@ -302,7 +301,7 @@ export class ConversionService {
         this.logger.log('should handle fallback 3.', this.shouldHandleFallback(response));
       
         // Check if we should try fallback offers
-        if (response && this.shouldHandleFallback(response) && filteredOffers.fallbackOffers.length > 10) {
+        if (response && this.shouldHandleFallback(response) && filteredOffers.fallbackOffers.length > 0) {
           this.logger.log(`Main offer failed, trying ${filteredOffers.fallbackOffers.length} fallback offers`);
           
           const fallbackResponse = await this.handleFallbackCheckoutOffers(
@@ -516,6 +515,7 @@ export class ConversionService {
         const fallbackVrioPayload = {
           ...vrioPayload,
           force_campaign_id: true,
+          offers_restrict:true,
           campaign_id: campaignId,
           offers: vrioOffers
         };
@@ -612,6 +612,7 @@ export class ConversionService {
         const fallbackVrioPayload = {
           ...vrioPayload,
           force_campaign_id: true,
+          offers_restrict:true,
           campaign_id: campaignId,
           offers: vrioOffers
         };
@@ -1024,7 +1025,7 @@ export class ConversionService {
   /**
    * Map checkout data to VRIO checkout format
    */
-  private mapToVrioCheckoutFormat(checkoutData: any): any {
+  private mapToVrioCheckoutFormat(checkoutData: ConversionDto): any {
     // Determine first and last names using shared logic
     const { firstName, lastName } = this.determineNames(checkoutData);
 
@@ -1032,10 +1033,10 @@ export class ConversionService {
       connection_id: 1,
       payment_method_id: 1,
       card_number: checkoutData.creditCardNumber,
-      card_type_id: this.getCardTypeId(checkoutData.creditCardNumber),
+      card_type_id: this.getCardTypeId(checkoutData.creditCardNumber || ''),
       card_cvv: checkoutData.cvc,
-      card_exp_month: parseInt(checkoutData.creditCardExpiryMonth),
-      card_exp_year: parseInt(checkoutData.creditCardExpiryYear),
+      card_exp_month: parseInt(checkoutData.creditCardExpiryMonth || ''),
+      card_exp_year: parseInt(checkoutData.creditCardExpiryYear || ''),
       customer_id: checkoutData.customerId,
       bill_fname: firstName,
       bill_lname: lastName,
@@ -1045,6 +1046,11 @@ export class ConversionService {
       bill_state: checkoutData.billingState || 'CA',
       bill_zipcode: checkoutData.billingZip || 'not available',
     };
+
+    // Map shippingProfileId only if it has a value
+    if (checkoutData.shippingProfileId) {
+      vrioPayload.shipping_profile_id = checkoutData.shippingProfileId;
+    }
 
     // Map offers - only include bump offer if isBump is true
     
