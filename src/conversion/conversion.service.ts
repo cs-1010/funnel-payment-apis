@@ -28,6 +28,7 @@ export class ConversionService {
     this.shippingId = 2; // Default value, as free shipping
     this.failureReasons = [
       "Insufficient Funds",
+      "Activity limit exceeded"
      /* "This transaction has been declined",
       "Activity limit exceeded",
       "Pick up card - NF",
