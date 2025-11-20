@@ -1105,6 +1105,10 @@ export class ConversionService {
       if (attr.campaign_id) {
         vrioPayload.tracking6 = attr.campaign_id;
       }
+
+      if (conversionDto.lastAttribution?._ef_transaction_id) {
+        vrioPayload.tracking12 = conversionDto.lastAttribution._ef_transaction_id;
+      }
     }
 
     return vrioPayload;
