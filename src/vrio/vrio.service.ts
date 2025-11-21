@@ -292,6 +292,16 @@ export class VrioService {
       vrioPayload.tracking9 = prospectData.reasonForBuying;
     }
 
+    
+
+    if (prospectData.c2) {
+      vrioPayload.tracking10 = prospectData.c2;
+    }
+
+    if (prospectData.c3) {
+      vrioPayload.tracking11 = prospectData.c3;
+    }
+
     if (prospectData.click_id) {
       vrioPayload.tracking12 = prospectData.click_id;
     }

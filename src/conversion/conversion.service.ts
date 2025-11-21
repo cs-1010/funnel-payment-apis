@@ -92,6 +92,8 @@ export class ConversionService {
       ipAddress: conversionDto.ipAddress || '127.0.0.1',
       reasonForBuying: conversionDto.reasonForBuying,
       lastAttribution: conversionDto.lastAttribution,
+      c2: conversionDto.lastAttribution?.c2 || '',
+      c3: conversionDto.lastAttribution?.c3 || '',
     };
 
     // Process additional fields for VRIO (no longer need AFID, SID, etc. as per requirements)
@@ -160,6 +162,8 @@ export class ConversionService {
         ipAddress: conversionDto.ipAddress || '127.0.0.1',
         reasonForBuying: conversionDto.reasonForBuying,
         lastAttribution: conversionDto.lastAttribution,
+        c2: conversionDto.lastAttribution?.c2 || '',
+        c3: conversionDto.lastAttribution?.c3 || '',
       };
 
       const processedProspectData = this.processVrioFields(prospectData, conversionDto);
@@ -212,6 +216,8 @@ export class ConversionService {
         ipAddress: conversionDto.ipAddress || '127.0.0.1',
         reasonForBuying: conversionDto.reasonForBuying,
         lastAttribution: conversionDto.lastAttribution,
+        c2: conversionDto.lastAttribution?.c2 || '',
+        c3: conversionDto.lastAttribution?.c3 || '',
       };
 
       const processedProspectData = this.processVrioFields(prospectData, conversionDto);
@@ -1109,6 +1115,15 @@ export class ConversionService {
       if (conversionDto.lastAttribution?._ef_transaction_id) {
         vrioPayload.tracking12 = conversionDto.lastAttribution._ef_transaction_id;
       }
+
+      if (conversionDto.lastAttribution?.c2) {
+        vrioPayload.tracking10 = conversionDto.lastAttribution.c2;
+      }
+
+      if (conversionDto.lastAttribution?.c3) {
+        vrioPayload.tracking11 = conversionDto.lastAttribution.c3;
+      }
+
     }
 
     return vrioPayload;
