@@ -1010,4 +1010,366 @@ export class VrioService {
   private generateCartToken(): string {
     return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
   }
+
+  /**
+   * Get orders by email from VRIO
+   * Tries POST /orders/search first, then falls back to GET /orders?email={email}
+   */
+  async getOrdersByEmail(email: string): Promise<VrioApiResponse[] | null> {
+    const apiUrl = `${this.apiUrl}/orders`;
+    
+    try {
+      this.logger.log(`Fetching orders by email: ${email}`);
+      
+      if (!email) {
+        throw new Error('Email is required to fetch orders');
+      }
+      
+      const authConfig = this.getAuthConfig();
+      
+      // Try POST /orders/search first (common pattern for search endpoints)
+      try {
+        const searchResponse = await firstValueFrom(
+          this.httpService.post(`${apiUrl}/search`, { customer_email: email, with: 'order_offers' }, authConfig)
+        );
+        
+        this.logger.log(`Orders search response received for email: ${email}`);
+        
+        // Handle response
+        if (searchResponse.data) {
+          if (Array.isArray(searchResponse.data)) {
+            return searchResponse.data;
+          } else if (searchResponse.data.data && Array.isArray(searchResponse.data.data)) {
+            return searchResponse.data.data;
+          } else if (searchResponse.data.orders && Array.isArray(searchResponse.data.orders)) {
+            return searchResponse.data.orders;
+          } else if (searchResponse.data.order_id) {
+            return [searchResponse.data];
+          }
+        }
+        
+        return [];
+      } catch (postError) {
+        this.logger.log(`POST /orders/search failed, trying GET with query params. Error: ${postError.response?.data || postError.message}`);
+        
+        // Fallback to GET /orders?customer_email={email}&with=order_offers
+        try {
+          const response = await firstValueFrom(
+            this.httpService.get(`${apiUrl}?customer_email=${encodeURIComponent(email)}&with=order_offers`, authConfig)
+          );
+          
+          // Handle response
+          if (response.data) {
+            if (Array.isArray(response.data)) {
+              return response.data;
+            } else if (response.data.data && Array.isArray(response.data.data)) {
+              return response.data.data;
+            } else if (response.data.orders && Array.isArray(response.data.orders)) {
+              return response.data.orders;
+            } else if (response.data.order_id) {
+              return [response.data];
+            }
+          }
+          
+          return [];
+        } catch (getError) {
+          this.logger.error(`GET /orders?customer_email failed. Status: ${getError.response?.status}, Error: ${JSON.stringify(getError.response?.data || getError.message)}`);
+          throw getError;
+        }
+      }
+    } catch (error) {
+      this.logger.error(`Error fetching orders by email: ${error.message}`);
+      this.logger.error(`Error details: ${JSON.stringify(error.response?.data || {})}`);
+      this.logger.error(`Error status: ${error.response?.status || 'N/A'}`);
+      
+      // If 404, return empty array (no orders found)
+      if (error.response?.status === 404) {
+        return [];
+      }
+      
+      // If 400, log more details and return null
+      if (error.response?.status === 400) {
+        this.logger.error(`400 Bad Request - API might not support this endpoint. Response: ${JSON.stringify(error.response?.data)}`);
+        return null;
+      }
+      
+      return null;
+    }
+  }
+
+  /**
+   * Get customer's last order by email
+   * Fetches orders and returns the most recent one
+   */
+  async getCustomerLastOrderByEmail(email: string): Promise<VrioApiResponse | null> {
+    try {
+      const orders = await this.getOrdersByEmail(email);
+      
+      if (!orders || orders.length === 0) {
+        this.logger.log(`No orders found for email: ${email}`);
+        return null;
+      }
+      
+      // Sort by date_created descending to get most recent
+      const sortedOrders = orders.sort((a, b) => {
+        const dateA = a.date_created ? new Date(a.date_created).getTime() : 0;
+        const dateB = b.date_created ? new Date(b.date_created).getTime() : 0;
+        return dateB - dateA;
+      });
+      
+      const lastOrder = sortedOrders[0];
+      this.logger.log(`Found last order for email ${email}: order_id=${lastOrder.order_id}`);
+      
+      return lastOrder;
+    } catch (error) {
+      this.logger.error(`Error getting customer last order by email: ${error.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Get order by order ID from VRIO
+   * GET /orders/{orderId}
+   */
+  async getOrderById(orderId: number): Promise<VrioApiResponse | null> {
+    const apiUrl = `${this.apiUrl}/orders/${orderId}`;
+    
+    try {
+      this.logger.log(`Fetching order by ID: ${orderId}`);
+      
+      if (!orderId) {
+        throw new Error('Order ID is required');
+      }
+      
+      const authConfig = this.getAuthConfig();
+      
+      const response = await firstValueFrom(
+        this.httpService.get(apiUrl, authConfig)
+      );
+      
+      if (response.data) {
+        return response.data;
+      }
+      
+      return null;
+    } catch (error) {
+      this.logger.error(`Error fetching order by ID: ${error.message}`);
+      
+      if (error.response?.status === 404) {
+        return null;
+      }
+      
+      return null;
+    }
+  }
+
+  /**
+   * Get customer by customer ID from VRIO
+   * GET /customers/{customerId}
+   */
+  async getCustomerById(customerId: number): Promise<VrioApiResponse | null> {
+    const apiUrl = `${this.apiUrl}/customers/${customerId}`;
+    
+    try {
+      this.logger.log(`Fetching customer by ID: ${customerId}`);
+      
+      if (!customerId) {
+        throw new Error('Customer ID is required');
+      }
+      
+      const authConfig = this.getAuthConfig();
+      
+      const response = await firstValueFrom(
+        this.httpService.get(apiUrl, authConfig)
+      );
+      
+      if (response.data) {
+        return response.data;
+      }
+      
+      return null;
+    } catch (error) {
+      this.logger.error(`Error fetching customer by ID: ${error.message}`);
+      
+      if (error.response?.status === 404) {
+        return null;
+      }
+      
+      return null;
+    }
+  }
+
+  /**
+   * Get customer by email from VRIO
+   * Tries POST /customers/search first, then GET /customers?email={email}
+   */
+  async getCustomerByEmail(email: string): Promise<VrioApiResponse | null> {
+    const apiUrl = `${this.apiUrl}/customers`;
+    
+    try {
+      this.logger.log(`Fetching customer by email: ${email}`);
+      
+      if (!email) {
+        throw new Error('Email is required to fetch customer');
+      }
+      
+      const authConfig = this.getAuthConfig();
+      
+      // Try POST /customers/search first
+      try {
+        const searchResponse = await firstValueFrom(
+          this.httpService.post(`${apiUrl}/search`, { customer_email: email }, authConfig)
+        );
+        
+        if (searchResponse.data) {
+          if (Array.isArray(searchResponse.data)) {
+            return searchResponse.data.length > 0 ? searchResponse.data[0] : null;
+          } else if (searchResponse.data.customer_id || searchResponse.data.id) {
+            return searchResponse.data;
+          } else if (searchResponse.data.data) {
+            const data = Array.isArray(searchResponse.data.data) 
+              ? searchResponse.data.data[0] 
+              : searchResponse.data.data;
+            return data || null;
+          }
+        }
+        
+        return null;
+      } catch (postError) {
+        this.logger.log(`POST /customers/search failed, trying GET. Error: ${postError.response?.data || postError.message}`);
+        
+        // Fallback to GET /customers?customer_email={email}
+        try {
+          const response = await firstValueFrom(
+            this.httpService.get(`${apiUrl}?customer_email=${encodeURIComponent(email)}`, authConfig)
+          );
+          
+          if (response.data) {
+            if (Array.isArray(response.data)) {
+              return response.data.length > 0 ? response.data[0] : null;
+            } else if (response.data.customer_id || response.data.id) {
+              return response.data;
+            } else if (response.data.data) {
+              const data = Array.isArray(response.data.data) 
+                ? response.data.data[0] 
+                : response.data.data;
+              return data || null;
+            }
+          }
+          
+          return null;
+        } catch (getError) {
+          this.logger.error(`GET /customers?customer_email failed. Status: ${getError.response?.status}, Error: ${JSON.stringify(getError.response?.data || getError.message)}`);
+          return null;
+        }
+      }
+    } catch (error) {
+      this.logger.error(`Error fetching customer by email: ${error.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Get orders by customer ID from VRIO
+   * Alternative method if we have customer_id
+   */
+  async getOrdersByCustomerId(customerId: number): Promise<VrioApiResponse[] | null> {
+    const apiUrl = `${this.apiUrl}/orders`;
+    
+    try {
+      this.logger.log(`Fetching orders by customer ID: ${customerId}`);
+      
+      if (!customerId) {
+        throw new Error('Customer ID is required to fetch orders');
+      }
+      
+      const authConfig = this.getAuthConfig();
+      
+      // Try POST /orders/search with customer_id
+      try {
+        const searchResponse = await firstValueFrom(
+          this.httpService.post(`${apiUrl}/search`, { customer_id: customerId }, authConfig)
+        );
+        
+        if (searchResponse.data) {
+          if (Array.isArray(searchResponse.data)) {
+            return searchResponse.data;
+          } else if (searchResponse.data.data && Array.isArray(searchResponse.data.data)) {
+            return searchResponse.data.data;
+          } else if (searchResponse.data.orders && Array.isArray(searchResponse.data.orders)) {
+            return searchResponse.data.orders;
+          }
+        }
+        
+        return [];
+      } catch (postError) {
+        // Fallback to GET /orders?customer_id={customerId}
+        try {
+          const response = await firstValueFrom(
+            this.httpService.get(`${apiUrl}?customer_id=${customerId}`, authConfig)
+          );
+          
+          if (response.data) {
+            if (Array.isArray(response.data)) {
+              return response.data;
+            } else if (response.data.data && Array.isArray(response.data.data)) {
+              return response.data.data;
+            } else if (response.data.orders && Array.isArray(response.data.orders)) {
+              return response.data.orders;
+            }
+          }
+          
+          return [];
+        } catch (getError) {
+          this.logger.error(`Error fetching orders by customer ID: ${getError.message}`);
+          return null;
+        }
+      }
+    } catch (error) {
+      this.logger.error(`Error fetching orders by customer ID: ${error.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Get customer and their last order by email
+   * Tries multiple approaches: orders by email, or customer by email then orders by customer_id
+   */
+  async getCustomerAndLastOrderByEmail(email: string): Promise<{
+    customer: VrioApiResponse | null;
+    lastOrder: VrioApiResponse | null;
+  }> {
+    // Approach 1: Try to get orders directly by email
+    let lastOrder = await this.getCustomerLastOrderByEmail(email);
+    
+    if (lastOrder && lastOrder.customer_id) {
+      // Get customer by ID from the order
+      const customer = await this.getCustomerById(lastOrder.customer_id);
+      return { customer, lastOrder };
+    }
+    
+    // Approach 2: Try to get customer by email first, then get orders
+    this.logger.log(`Trying alternative approach: get customer by email first`);
+    const customer = await this.getCustomerByEmail(email);
+    
+    if (customer && customer.customer_id) {
+      // Get orders by customer_id
+      const orders = await this.getOrdersByCustomerId(customer.customer_id);
+      
+      if (orders && orders.length > 0) {
+        // Sort by date_created descending to get most recent
+        const sortedOrders = orders.sort((a, b) => {
+          const dateA = a.date_created ? new Date(a.date_created).getTime() : 0;
+          const dateB = b.date_created ? new Date(b.date_created).getTime() : 0;
+          return dateB - dateA;
+        });
+        
+        lastOrder = sortedOrders[0];
+        this.logger.log(`Found last order via customer lookup: order_id=${lastOrder.order_id}`);
+        return { customer, lastOrder };
+      }
+    }
+    
+    return { customer, lastOrder: null };
+  }
 }

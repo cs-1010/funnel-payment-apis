@@ -428,10 +428,16 @@ export class ConversionService {
     // Convert offers to VRIO format for upsell
     vrioPayload.offers = this.convertOffersToVrioUpsellFormat(initialOffers, conversionDto);
 
+    const updatedVrioPayload = {
+      ...vrioPayload,
+     // force_campaign_id: true,
+      
+    };
     
+    this.logger.log('updatedVrioPayload', vrioPayload);
     
     // Use VRIO service for upsell
-    const response = await this.vrioService.processUpsell(vrioPayload);
+    const response = await this.vrioService.processUpsell(updatedVrioPayload);
 
     const queueData = this.prepareQueueData(response, conversionDto, vrioPayload);
     
@@ -1195,7 +1201,8 @@ export class ConversionService {
         item_id: parseInt(offer.productId?.toString()),
         order_offer_upsell: true,
         parent_offer_id: conversionDto.parentOfferId,
-        parent_order_id: conversionDto.prevOrderId
+        parent_order_id: conversionDto.prevOrderId,
+        
       }));
   }
 
@@ -1252,6 +1259,125 @@ export class ConversionService {
     }
     
     return { firstName, lastName };
+  }
+
+  async processUpsellByEmail5(email: string, offerId: string, productId: string): Promise<any> {
+    this.logger.log(`Processing upsell by email: ${email}, offerId: ${offerId}, productId: ${productId}`);
+
+    // Fetch customer and last order from VRIO API
+    const { customer, lastOrder } = await this.vrioService.getCustomerAndLastOrderByEmail(email);
+    
+    return lastOrder;
+  }
+  async processUpsellByEmail(email: string, offerId: string, productId: string): Promise<any> {
+    this.logger.log(`Processing upsell by email: ${email}, offerId: ${offerId}, productId: ${productId}`);
+
+    // Fetch customer and last order from VRIO API
+    const { customer, lastOrder } = await this.vrioService.getCustomerAndLastOrderByEmail(email);
+    
+    
+    if (!lastOrder || !lastOrder.order_id) {
+      await this.jobService.createJob(JobType.ERROR, {
+        errorMessage: `No order found for email: ${email}`,
+        email,
+        offerId,
+        productId
+      });
+      return { error_message: 'No previous order found for this email', error_found: "1" };
+    }
+
+    
+    if (!lastOrder.customer_id) {
+      await this.jobService.createJob(JobType.ERROR, {
+        errorMessage: `No customer ID found in order for email: ${email}`,
+        email,
+        offerId,
+        productId,
+        orderId: lastOrder.order_id
+      });
+      return { error_message: 'Invalid order data: missing customer ID', error_found: "1" };
+    }
+
+    // Extract required fields from the last order
+    const customerId = lastOrder.customer_id;
+    const prevOrderId = lastOrder.order_id;
+    const cardId = lastOrder.customer_card_id;
+    const customerBillingId = lastOrder.customers_address_billing_id || customerId;
+    const stickyCampaignId = 7;
+    
+    // Extract parent offer ID from the last order's offers
+    let parentOfferId: number | undefined;
+    if (lastOrder.order_offers && Array.isArray(lastOrder.order_offers) && lastOrder.order_offers.length > 0) {
+      // Get the first main offer (non-upsell) as parent
+      const mainOffer = lastOrder.order_offers.find((offer: any) => !offer.order_offer_upsell);
+      if (mainOffer?.offer_id) {
+        parentOfferId = mainOffer.offer_id;
+      } else if (lastOrder.order_offers[0]?.offer_id) {
+        // Fallback to first offer if no main offer found
+        parentOfferId = lastOrder.order_offers[0].offer_id;
+      }
+    }
+
+    // Validate required fields
+    if (!customerId) {
+      await this.jobService.createJob(JobType.ERROR, {
+        errorMessage: `Missing customerId for email: ${email}`,
+        email,
+        offerId,
+        productId
+      });
+      return { error_message: 'Invalid customer data: missing customer ID', error_found: "1" };
+    }
+
+    if (!prevOrderId) {
+      await this.jobService.createJob(JobType.ERROR, {
+        errorMessage: `Missing orderId for email: ${email}`,
+        email,
+        offerId,
+        productId
+      });
+      return { error_message: 'Invalid order data: missing order ID', error_found: "1" };
+    }
+
+    // Extract tracking/attribution from last order
+    const lastAttribution: any = {};
+    if (lastOrder.tracking1) lastAttribution.utm_campaign = lastOrder.tracking1;
+    if (lastOrder.tracking2) lastAttribution.utm_source = lastOrder.tracking2;
+    if (lastOrder.tracking3) lastAttribution.h_ad_id = lastOrder.tracking3;
+    if (lastOrder.tracking4) lastAttribution.adid = lastOrder.tracking4;
+    if (lastOrder.tracking5) lastAttribution.gc_id = lastOrder.tracking5;
+    if (lastOrder.tracking6) lastAttribution.campaign_id = lastOrder.tracking6;
+    if (lastOrder.tracking12) lastAttribution._ef_transaction_id = lastOrder.tracking12;
+    if (lastOrder.tracking10) lastAttribution.c2 = lastOrder.tracking10;
+    if (lastOrder.tracking11) lastAttribution.c3 = lastOrder.tracking11;
+
+    // Construct ConversionDto for upsell
+    const conversionDto: ConversionDto = {
+      conversionType: ConversionType.UPSELL,
+      email: email,
+      customerId: customerId,
+      prevOrderId: prevOrderId,
+      cardId: cardId,
+      creditCardId: cardId,
+      customerCardId: cardId,
+      customerBillingId: customerBillingId,
+      customerAdressBillingId: customerBillingId,
+      parentOfferId: parentOfferId,
+      mainOfferId: offerId,
+      mainProductId: productId,
+      stickyCampaignId: stickyCampaignId,
+      offers: [{
+        type: 'MAIN',
+        offerId: offerId,
+        productId: productId,
+        quantity: 1
+      }],
+      lastAttribution: lastAttribution,
+      ipAddress: lastOrder.ip_address
+    } as ConversionDto;
+
+    // Process the upsell using existing method
+    return await this.processUpsell(conversionDto);
   }
 
   

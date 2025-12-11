@@ -2,6 +2,7 @@ import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { ConversionService } from './conversion.service';
 import { ThrottlerGuard, Throttle } from '@nestjs/throttler';
 import { ConversionDto } from './dto/conversion.dto';
+import { UpsellByEmailDto } from './dto/upsell-by-email.dto';
 import { InjectIP } from '../common/decorators/inject-ip.decorator';
 import { VrioService } from '../vrio/vrio.service';
 
@@ -52,6 +53,16 @@ export class ConversionController {
         };
         
         return await this.vrioService.processUpsell(sampleUpsellData);
+    }
+
+    @Post('upsell-by-email')
+    @Throttle({ default: { limit: 50, ttl: 60000 } })
+    async upsellByEmail(@Body() upsellDto: UpsellByEmailDto, @InjectIP() ipAddress: string) {
+        return await this.conversionService.processUpsellByEmail(
+            upsellDto.email,
+            upsellDto.offerId,
+            upsellDto.productId
+        );
     }
 
 }
