@@ -1,10 +1,11 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, UseGuards, Query, Res } from '@nestjs/common';
 import { ConversionService } from './conversion.service';
 import { ThrottlerGuard, Throttle } from '@nestjs/throttler';
 import { ConversionDto } from './dto/conversion.dto';
 import { UpsellByEmailDto } from './dto/upsell-by-email.dto';
 import { InjectIP } from '../common/decorators/inject-ip.decorator';
 import { VrioService } from '../vrio/vrio.service';
+import { Response } from 'express';
 
 @Controller('conversion')
 @UseGuards(ThrottlerGuard)
@@ -55,14 +56,30 @@ export class ConversionController {
         return await this.vrioService.processUpsell(sampleUpsellData);
     }
 
-    @Post('upsell-by-email')
+    @Get('upsell-by-email')
     @Throttle({ default: { limit: 50, ttl: 60000 } })
-    async upsellByEmail(@Body() upsellDto: UpsellByEmailDto, @InjectIP() ipAddress: string) {
-        return await this.conversionService.processUpsellByEmail(
+    async upsellByEmail(
+        @Query() upsellDto: UpsellByEmailDto,
+        @Res() res: Response,
+        @InjectIP() ipAddress: string
+    ) {
+        const result = await this.conversionService.processUpsellByEmail(
             upsellDto.email,
             upsellDto.offerId,
             upsellDto.productId
         );
+        
+        // Check if upsell was successful (has order_id)
+        if (result && result.order_id && !result.error_found) {
+            // Redirect to success URL
+            return res.redirect('https://members.bigbudget.com/order-confirmation?success=1');
+        }else{
+
+            return res.redirect('https://members.bigbudget.com/order-confirmation?success=0');
+        }
+        
+        // If failed, return error response
+        return res.status(400).json(result || { error_message: 'Upsell processing failed', error_found: "1" });
     }
 
 }
