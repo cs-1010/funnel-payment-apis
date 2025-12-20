@@ -18,7 +18,7 @@ async function bootstrap() {
     new ValidationPipe({
       transform: true,
       whitelist: true,
-      forbidNonWhitelisted: true,
+      forbidNonWhitelisted: false, // Allow extra fields without throwing errors
     }),
   );
   app.setGlobalPrefix("api");
