@@ -146,6 +146,10 @@ export class ConversionDto {
 
   @IsOptional()
   @IsString()
+  clickId?: string;
+
+  @IsOptional()
+  @IsString()
   ga4SessionId?: string;
 
   @IsOptional()
