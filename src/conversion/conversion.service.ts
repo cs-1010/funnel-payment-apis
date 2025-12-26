@@ -1285,7 +1285,12 @@ export class ConversionService {
         offerId,
         productId
       });
-      return { error_message: 'No previous order found for this email', error_found: "1" };
+      return {
+        errorMessage: `No order found for email: ${email}`,
+        email,
+        offerId,
+        productId
+      };
     }
 
     
