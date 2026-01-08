@@ -377,4 +377,8 @@ export class ConversionDto {
   @IsString()
   shippingProfileId?:string
   
+  @IsOptional()
+  @IsString()
+  fpDeals?:string
+  
 }

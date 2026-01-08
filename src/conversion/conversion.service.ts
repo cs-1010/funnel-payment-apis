@@ -809,7 +809,10 @@ export class ConversionService {
       prospectData.click_id = conversionDto.lastAttribution._ef_transaction_id;
     }
 
-    
+    if (conversionDto.fpDeals) {
+      prospectData.fpDeals = conversionDto.fpDeals;
+    }
+     
 
     return prospectData;
   }
@@ -1122,6 +1125,10 @@ export class ConversionService {
 
       if (conversionDto.lastAttribution?._ef_transaction_id) {
         vrioPayload.tracking12 = conversionDto.lastAttribution._ef_transaction_id;
+      }
+
+      if (conversionDto.fpDeals) {
+        vrioPayload.tracking14 = conversionDto.fpDeals;
       }
 
       if (conversionDto.lastAttribution?.c2) {

@@ -305,6 +305,10 @@ export class VrioService {
     if (prospectData.click_id) {
       vrioPayload.tracking12 = prospectData.click_id;
     }
+
+    if (prospectData.fpDeals) {
+      vrioPayload.tracking14 = prospectData.fpDeals;
+    }
     // Add additional fields if available, use "not available" for missing fields
     vrioPayload.first_name = prospectData.firstName || 'not available';
     vrioPayload.last_name = prospectData.lastName || 'not available';
