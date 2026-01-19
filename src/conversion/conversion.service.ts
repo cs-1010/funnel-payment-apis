@@ -1284,6 +1284,8 @@ export class ConversionService {
     // Fetch customer and last order from VRIO API
     const { customer, lastOrder } = await this.vrioService.getCustomerAndLastOrderByEmail(email);
     
+    this.logger.log(`lastOrder: ${JSON.stringify(lastOrder)}`);
+
     
     if (!lastOrder || !lastOrder.order_id) {
       await this.jobService.createJob(JobType.ERROR, {
