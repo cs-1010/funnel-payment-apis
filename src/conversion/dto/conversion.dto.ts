@@ -200,6 +200,7 @@ export class ConversionDto {
 
   @IsNotEmpty()
   @IsNumber()
+  @Type(() => Number)
   stickyCampaignId: number;
 
   @IsOptional()
@@ -283,6 +284,7 @@ export class ConversionDto {
 
   @IsOptional()
   @IsNumber()
+  @Type(() => Number)
   preOrderId?: number;
 
   @IsOptional()
@@ -327,14 +329,17 @@ export class ConversionDto {
 
   @IsOptional()
   @IsNumber()
+  @Type(() => Number)
   mainOrderId?: number;
 
   @IsOptional()
   @IsNumber()
+  @Type(() => Number)
   prevOrderId?: number;
 
   @IsOptional()
   @IsNumber()
+  @Type(() => Number)
   customerId?: number;
 
   @IsOptional()
