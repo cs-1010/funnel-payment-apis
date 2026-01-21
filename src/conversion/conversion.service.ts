@@ -1300,6 +1300,65 @@ export class ConversionService {
     
     return lastOrder;
   }
+  /**
+   * Check if an order is successful
+   * An order is considered successful if:
+   * 1. It doesn't have payment_failed flag set to true
+   * 2. It has at least one transaction with response_code === 100 (success)
+   * Response codes: 100 = success, other values = rejected/failed
+   */
+  private isOrderSuccessful(order: any): boolean {
+    // Explicitly failed orders
+    if (order.payment_failed === true || order.success === false) {
+      return false;
+    }
+
+    // Orders without transactions are likely incomplete or failed
+    if (!order.transactions || !Array.isArray(order.transactions) || order.transactions.length === 0) {
+      return false;
+    }
+
+    // Check if at least one transaction has response_code === 100 (success)
+    const hasSuccessfulTransaction = order.transactions.some((txn: any) => {
+      // Primary check: response_code should be 100 for success (can be number or string)
+      const responseCode = txn.response_code;
+      if (responseCode === 100 || responseCode === "100") {
+        return true;
+      }
+
+      // If response_code exists and is not 100, it's not successful
+      if (responseCode !== null && responseCode !== undefined && responseCode !== 100 && responseCode !== "100") {
+        return false;
+      }
+
+      // Fallback: also check gateway_response_code if response_code is not available
+      const gatewayResponseCode = txn.gateway_response_code?.toString();
+      if (gatewayResponseCode === "100") {
+        return true;
+      }
+
+      // If gateway_response_code exists and is not "100", it's not successful
+      if (gatewayResponseCode && gatewayResponseCode !== "100") {
+        return false;
+      }
+
+      // Additional fallback: check transaction_status in line_items if available
+      if (txn.line_items && Array.isArray(txn.line_items) && txn.line_items.length > 0) {
+        const hasSuccessfulLineItem = txn.line_items.some((item: any) => {
+          const status = (item.transaction_status || '').toLowerCase();
+          return status === 'success';
+        });
+        if (hasSuccessfulLineItem) {
+          return true;
+        }
+      }
+
+      return false;
+    });
+
+    return hasSuccessfulTransaction;
+  }
+
   async processUpsellByEmail(email: string, offerId: string, productId: string): Promise<any> {
     this.logger.log(`Processing upsell by email: ${email}, offerId: ${offerId}, productId: ${productId}`);
    
@@ -1336,33 +1395,57 @@ export class ConversionService {
       return { error_message: 'Invalid order data: missing customer ID', error_found: "1" };
     }
 
-    // Extract required fields from the last order
+    // Get all orders for the customer to find the most recent successful order
     const customerId = lastOrder.customer_id;
-    const prevOrderId = lastOrder.order_id;
-    const cardId = lastOrder.customer_card_id;
-    const customerBillingId = lastOrder.customers_address_billing_id || customerId;
+    const allOrders = await this.vrioService.getOrdersByCustomerId(customerId);
+    
+    let lastOrderToUse = lastOrder;
+    
+    if (allOrders && allOrders.length > 0) {
+      // Filter for successful orders
+      const successfulOrders = allOrders.filter((order: any) => this.isOrderSuccessful(order));
+      
+      if (successfulOrders.length > 0) {
+        // Sort by date_created descending to get most recent successful order
+        const sortedSuccessfulOrders = successfulOrders.sort((a: any, b: any) => {
+          const dateA = a.date_created ? new Date(a.date_created).getTime() : 0;
+          const dateB = b.date_created ? new Date(b.date_created).getTime() : 0;
+          return dateB - dateA;
+        });
+        
+        lastOrderToUse = sortedSuccessfulOrders[0];
+        this.logger.log(`Found most recent successful order: order_id=${lastOrderToUse.order_id} (was using: ${lastOrder.order_id})`);
+      } else {
+        this.logger.warn(`No successful orders found for customer ${customerId}, using last order: ${lastOrder.order_id}`);
+      }
+    }
+
+    // Extract required fields from the selected order
+    const prevOrderId = lastOrderToUse.order_id;
+    const cardId = lastOrderToUse.customer_card_id;
+    const customerBillingId = lastOrderToUse.customers_address_billing_id || customerId;
     const stickyCampaignId = 7;
     
     // Extract merchant_id from transactions if available
     let merchantId: number | undefined;
-    if (lastOrder.transactions && Array.isArray(lastOrder.transactions) && lastOrder.transactions.length > 0) {
-      const firstTransaction = lastOrder.transactions[0];
+    if (lastOrderToUse.transactions && Array.isArray(lastOrderToUse.transactions) && lastOrderToUse.transactions.length > 0) {
+      const firstTransaction = lastOrderToUse.transactions[0];
       merchantId = firstTransaction.merchant_id || firstTransaction.merchant?.merchant_id;
       if (merchantId) {
         this.logger.log(`Extracted merchant_id: ${merchantId} from order ${prevOrderId}`);
       }
     }
     
-    // Extract parent offer ID from the last order's offers
+    // Extract parent offer ID from the selected order's offers
     let parentOfferId: number | undefined;
-    if (lastOrder.order_offers && Array.isArray(lastOrder.order_offers) && lastOrder.order_offers.length > 0) {
+    if (lastOrderToUse.order_offers && Array.isArray(lastOrderToUse.order_offers) && lastOrderToUse.order_offers.length > 0) {
       // Get the first main offer (non-upsell) as parent
-      const mainOffer = lastOrder.order_offers.find((offer: any) => !offer.order_offer_upsell);
+      const mainOffer = lastOrderToUse.order_offers.find((offer: any) => !offer.order_offer_upsell);
       if (mainOffer?.offer_id) {
         parentOfferId = mainOffer.offer_id;
-      } else if (lastOrder.order_offers[0]?.offer_id) {
+      } else if (lastOrderToUse.order_offers[0]?.offer_id) {
         // Fallback to first offer if no main offer found
-        parentOfferId = lastOrder.order_offers[0].offer_id;
+        parentOfferId = lastOrderToUse.order_offers[0].offer_id;
       }
     }
 
@@ -1387,17 +1470,17 @@ export class ConversionService {
       return { error_message: 'Invalid order data: missing order ID', error_found: "1" };
     }
 
-    // Extract tracking/attribution from last order
+    // Extract tracking/attribution from selected order
     const lastAttribution: any = {};
-    if (lastOrder.tracking1) lastAttribution.utm_campaign = lastOrder.tracking1;
-    if (lastOrder.tracking2) lastAttribution.utm_source = lastOrder.tracking2;
-    if (lastOrder.tracking3) lastAttribution.h_ad_id = lastOrder.tracking3;
-    if (lastOrder.tracking4) lastAttribution.adid = lastOrder.tracking4;
-    if (lastOrder.tracking5) lastAttribution.gc_id = lastOrder.tracking5;
-    if (lastOrder.tracking6) lastAttribution.campaign_id = lastOrder.tracking6;
-    if (lastOrder.tracking12) lastAttribution._ef_transaction_id = lastOrder.tracking12;
-    if (lastOrder.tracking10) lastAttribution.c2 = lastOrder.tracking10;
-    if (lastOrder.tracking11) lastAttribution.c3 = lastOrder.tracking11;
+    if (lastOrderToUse.tracking1) lastAttribution.utm_campaign = lastOrderToUse.tracking1;
+    if (lastOrderToUse.tracking2) lastAttribution.utm_source = lastOrderToUse.tracking2;
+    if (lastOrderToUse.tracking3) lastAttribution.h_ad_id = lastOrderToUse.tracking3;
+    if (lastOrderToUse.tracking4) lastAttribution.adid = lastOrderToUse.tracking4;
+    if (lastOrderToUse.tracking5) lastAttribution.gc_id = lastOrderToUse.tracking5;
+    if (lastOrderToUse.tracking6) lastAttribution.campaign_id = lastOrderToUse.tracking6;
+    if (lastOrderToUse.tracking12) lastAttribution._ef_transaction_id = lastOrderToUse.tracking12;
+    if (lastOrderToUse.tracking10) lastAttribution.c2 = lastOrderToUse.tracking10;
+    if (lastOrderToUse.tracking11) lastAttribution.c3 = lastOrderToUse.tracking11;
 
     // Construct ConversionDto for upsell
     const conversionDto: ConversionDto = {
@@ -1421,7 +1504,7 @@ export class ConversionService {
         quantity: 1
       }],
       lastAttribution: lastAttribution,
-      ipAddress: lastOrder.ip_address,
+      ipAddress: lastOrderToUse.ip_address,
       merchantId: merchantId,
       accountId: '', // Required field, set to empty string for upsell-by-email flow
       externalIds: {} // Required field, set to empty object for upsell-by-email flow

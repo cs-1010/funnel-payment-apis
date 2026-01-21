@@ -1302,8 +1302,9 @@ export class VrioService {
       
       // Try POST /orders/search with customer_id
       try {
+        
         const searchResponse = await firstValueFrom(
-          this.httpService.post(`${apiUrl}/search`, { customer_id: customerId }, authConfig)
+          this.httpService.post(`${apiUrl}/search?with=order_offers,transactions`, { customer_id: customerId }, authConfig)
         );
         
         if (searchResponse.data) {
@@ -1319,11 +1320,13 @@ export class VrioService {
         return [];
       } catch (postError) {
         // Fallback to GET /orders?customer_id={customerId}
+       
         try {
           const response = await firstValueFrom(
-            this.httpService.get(`${apiUrl}?customer_id=${customerId}`, authConfig)
+            this.httpService.get(`${apiUrl}?customer_id=${customerId}&with=order_offers,transactions`, authConfig)
           );
           
+         
           if (response.data) {
             if (Array.isArray(response.data)) {
               return response.data;
