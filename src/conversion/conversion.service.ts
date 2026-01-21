@@ -436,6 +436,24 @@ export class ConversionService {
     
     this.logger.log('updatedVrioPayload', vrioPayload);
     
+    // Log payment details before charging
+    const paymentDetails: any = {
+      customerId: conversionDto.customerId,
+      prevOrderId: conversionDto.prevOrderId,
+      offers: conversionDto.offers,
+    };
+    
+    if (conversionDto.merchantId) {
+      paymentDetails.merchant_id = conversionDto.merchantId;
+      this.logger.log(`Charging with merchant_id: ${conversionDto.merchantId}`);
+    } else {
+      paymentDetails.creditCardId = conversionDto.creditCardId;
+      paymentDetails.cardId = conversionDto.cardId;
+      this.logger.log(`Charging with creditCardId: ${conversionDto.creditCardId}, cardId: ${conversionDto.cardId}`);
+    }
+    
+    this.logger.log('Payment details before charging:', JSON.stringify(paymentDetails, null, 2));
+    
     // Use VRIO service for upsell
     const response = await this.vrioService.processUpsell(updatedVrioPayload);
 
@@ -1089,6 +1107,10 @@ export class ConversionService {
       payment_method_id: 1,
     };
 
+    if (conversionDto.merchantId) {
+      vrioPayload.merchant_id = conversionDto.merchantId;
+    }
+
     // Map tracking fields from lastAttribution
     if (conversionDto.lastAttribution) {
       const attr = conversionDto.lastAttribution;
@@ -1280,7 +1302,7 @@ export class ConversionService {
   }
   async processUpsellByEmail(email: string, offerId: string, productId: string): Promise<any> {
     this.logger.log(`Processing upsell by email: ${email}, offerId: ${offerId}, productId: ${productId}`);
-
+   
     // Fetch customer and last order from VRIO API
     const { customer, lastOrder } = await this.vrioService.getCustomerAndLastOrderByEmail(email);
     
@@ -1320,6 +1342,16 @@ export class ConversionService {
     const cardId = lastOrder.customer_card_id;
     const customerBillingId = lastOrder.customers_address_billing_id || customerId;
     const stickyCampaignId = 7;
+    
+    // Extract merchant_id from transactions if available
+    let merchantId: number | undefined;
+    if (lastOrder.transactions && Array.isArray(lastOrder.transactions) && lastOrder.transactions.length > 0) {
+      const firstTransaction = lastOrder.transactions[0];
+      merchantId = firstTransaction.merchant_id || firstTransaction.merchant?.merchant_id;
+      if (merchantId) {
+        this.logger.log(`Extracted merchant_id: ${merchantId} from order ${prevOrderId}`);
+      }
+    }
     
     // Extract parent offer ID from the last order's offers
     let parentOfferId: number | undefined;
@@ -1373,9 +1405,9 @@ export class ConversionService {
       email: email,
       customerId: customerId,
       prevOrderId: prevOrderId,
-      cardId: cardId,
-      creditCardId: cardId,
-      customerCardId: cardId,
+      cardId: cardId ?? undefined,
+      creditCardId: cardId ?? undefined,
+      customerCardId: cardId ?? undefined,
       customerBillingId: customerBillingId,
       customerAdressBillingId: customerBillingId,
       parentOfferId: parentOfferId,
@@ -1389,8 +1421,11 @@ export class ConversionService {
         quantity: 1
       }],
       lastAttribution: lastAttribution,
-      ipAddress: lastOrder.ip_address
-    } as ConversionDto;
+      ipAddress: lastOrder.ip_address,
+      merchantId: merchantId,
+      accountId: '', // Required field, set to empty string for upsell-by-email flow
+      externalIds: {} // Required field, set to empty object for upsell-by-email flow
+    };
 
     // Process the upsell using existing method
     return await this.processUpsell(conversionDto);

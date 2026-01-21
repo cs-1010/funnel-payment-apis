@@ -362,6 +362,10 @@ export class ConversionDto {
   customerAdressBillingId?: number;
 
   @IsOptional()
+  @IsNumber()
+  merchantId?: number;
+
+  @IsOptional()
   @IsString()
   url?:string
 

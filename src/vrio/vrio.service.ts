@@ -676,20 +676,31 @@ export class VrioService {
   private mapToVrioUpsellFormat(upsellData: any): any {
     // If the data is already in VRIO format (from conversion service), return it directly
     if (upsellData.connection_id && upsellData.customer_id && upsellData.offers) {
-      this.logger.log('Using pre-formatted VRIO upsell payload from conversion service');
+      this.logger.log('Using pre-formatted VRIO upsell payload from conversion service',upsellData);
       return upsellData;
     }
 
     // Legacy fallback logic for backward compatibility
+    // Use merchant_id if available, otherwise fallback to customer_card_id
+    const cardIdentifier = upsellData.merchantId 
+      ? upsellData.merchantId 
+      : (upsellData.cardId || upsellData.customerCardId || upsellData.creditCardId);
+    
     const vrioPayload: any = {
       connection_id: 1,
       campaign_id: upsellData.stickyCampaignId || 2,
       customer_id: upsellData.customerId,
       customers_address_billing_id: upsellData.customerAdressBillingId || upsellData.customerBillingId || upsellData.customerId,
-      customer_card_id: upsellData.cardId || upsellData.customerCardId || upsellData.creditCardId,
+      customer_card_id: cardIdentifier,
       action: "process",
       payment_method_id: 1,
     };
+    
+    // If merchant_id is available, also include it in the payload
+    if (upsellData.merchantId) {
+      vrioPayload.merchant_id = upsellData.merchantId;
+      
+    }
 
     // Map tracking fields from lastAttribution
     if (upsellData.lastAttribution) {
@@ -1034,7 +1045,7 @@ export class VrioService {
       // Try POST /orders/search first (common pattern for search endpoints)
       try {
         const searchResponse = await firstValueFrom(
-          this.httpService.post(`${apiUrl}/search`, { customer_email: email, with: 'order_offers' }, authConfig)
+          this.httpService.post(`${apiUrl}/search`, { customer_email: email, with: 'order_offers,transactions' }, authConfig)
         );
         
         this.logger.log(`Orders search response received for email: ${email}`);
@@ -1059,7 +1070,7 @@ export class VrioService {
         // Fallback to GET /orders?customer_email={email}&with=order_offers
         try {
           const response = await firstValueFrom(
-            this.httpService.get(`${apiUrl}?customer_email=${encodeURIComponent(email)}&with=order_offers`, authConfig)
+            this.httpService.get(`${apiUrl}?customer_email=${encodeURIComponent(email)}&with=order_offers,transactions`, authConfig)
           );
           
           // Handle response
