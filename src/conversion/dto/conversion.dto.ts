@@ -167,6 +167,7 @@ export class ConversionDto {
 
   @IsOptional()
   @IsNumber()
+  @Type(() => Number)
   prospectId?: number;
 
   @IsOptional()
@@ -344,30 +345,37 @@ export class ConversionDto {
 
   @IsOptional()
   @IsNumber()
+  @Type(() => Number)
   cardId?: number;
 
   @IsOptional()
   @IsNumber()
+  @Type(() => Number)
   creditCardId?: number;
 
   @IsOptional()
   @IsNumber()
+  @Type(() => Number)
   customerBillingId?: number;
 
   @IsOptional()
   @IsNumber()
+  @Type(() => Number)
   parentOfferId?: number;
 
   @IsOptional()
   @IsNumber()
+  @Type(() => Number)
   customerCardId?: number;
 
   @IsOptional()
   @IsNumber()
+  @Type(() => Number)
   customerAdressBillingId?: number;
 
   @IsOptional()
   @IsNumber()
+  @Type(() => Number)
   merchantId?: number;
 
   @IsOptional()
