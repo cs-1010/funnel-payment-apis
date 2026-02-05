@@ -75,7 +75,7 @@ export class ConversionController {
             return res.redirect('https://members.bigbudget.com/order-confirmation?success=1');
         }else{
 
-            return res.redirect('https://members.bigbudget.com/order-confirmation?success=0&offerId=' + result.offerId + '&productId=' + result.productId +'&email=' + result.email);
+            return res.redirect('https://members.bigbudget.com/checkout-page?offerId=' + result.offerId + '&productId=' + result.productId +'&email=' + result.email);
         }
         
         // If failed, return error response
