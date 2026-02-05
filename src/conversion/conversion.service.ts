@@ -51,6 +51,14 @@ export class ConversionService {
       this.logger.log(`Mapped preOrderId ${conversionDto.preOrderId} to prevOrderId`);
     }
 
+    if (
+      conversionDto.conversionType === ConversionType.UPSELL &&
+      this.hasCardDetails(conversionDto)
+    ) {
+      this.logger.log('Upsell payload contains card details, routing to checkout');
+      return this.processCheckout(conversionDto);
+    }
+
     let response: any = null;
     // await this.getFunnelFromDatabase(funnelDto.fname, funnelDto.cId)
     switch (conversionDto.conversionType) {
@@ -73,6 +81,20 @@ export class ConversionService {
     }
 
     return response;
+  }
+
+  private hasCardDetails(conversionDto: ConversionDto): boolean {
+    const cardFields = [
+      conversionDto.cardHolderName,
+      conversionDto.creditCardNumber,
+      conversionDto.creditCardExpiryMonth,
+      conversionDto.creditCardExpiryYear,
+      conversionDto.cvc,
+    ];
+
+    return cardFields.some(
+      (value) => typeof value === 'string' && value.trim().length > 0,
+    );
   }
 
   
