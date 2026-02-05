@@ -321,7 +321,12 @@ export class ConversionService {
       
 
       if (response?.order_id) {
-        await this.jobService.createJob(JobType.SALE, queueData);
+        if(conversionDto.conversionType === ConversionType.UPSELL){
+          await this.jobService.createJob(JobType.UPSELL_SALE, queueData);
+        }else{
+          await this.jobService.createJob(JobType.SALE, queueData);
+        }
+        
       } else {
         await this.jobService.createJob(JobType.FAILED_SALE, queueData);
 
