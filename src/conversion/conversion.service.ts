@@ -481,6 +481,7 @@ export class ConversionService {
     
     this.logger.log('Payment details before charging:', JSON.stringify(paymentDetails, null, 2));
     
+   
     // Use VRIO service for upsell
     const response = await this.vrioService.processUpsell(updatedVrioPayload);
 
@@ -1325,7 +1326,7 @@ export class ConversionService {
     // Fetch customer and last order from VRIO API
     const { customer, lastOrder } = await this.vrioService.getCustomerAndLastOrderByEmail(email);
     
-    return lastOrder;
+    return customer;
   }
   /**
    * Check if an order is successful

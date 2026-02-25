@@ -56,6 +56,16 @@ export class ConversionController {
         return await this.vrioService.processUpsell(sampleUpsellData);
     }
 
+    @Get('upsell-by-email5')
+    @Throttle({ default: { limit: 50, ttl: 60000 } })
+    async upsellByEmail5(@Query() upsellDto: UpsellByEmailDto) {
+        return await this.conversionService.processUpsellByEmail5(
+            upsellDto.email,
+            upsellDto.offerId,
+            upsellDto.productId
+        );
+    }
+
     @Get('upsell-by-email')
     @Throttle({ default: { limit: 50, ttl: 60000 } })
     async upsellByEmail(
@@ -69,12 +79,16 @@ export class ConversionController {
             upsellDto.productId
         );
         
+        //return res.status(200).json(result);
         // Check if upsell was successful (has order_id)
         if (result && result.order_id && !result.error_found) {
             // Redirect to success URL
             return res.redirect('https://members.bigbudget.com/order-confirmation?success=1');
         }else{
 
+            const offerId = result.postedPayload.offers[0].offerId || result.offerId;
+            const productId = result.postedPayload.offers[0].productId || result.productId;
+            const email = result.postedPayload.email || result.email;
             return res.redirect('https://members.bigbudget.com/checkout-page?offerId=' + result.offerId + '&productId=' + result.productId +'&email=' + result.email);
         }
         
