@@ -84,12 +84,23 @@ export class ConversionController {
         if (result && result.order_id && !result.error_found) {
             // Redirect to success URL
             return res.redirect('https://members.bigbudget.com/order-confirmation?success=1');
-        }else{
-
-            const offerId = result.postedPayload.offers[0].offerId || result.offerId;
-            const productId = result.postedPayload.offers[0].productId || result.productId;
-            const email = result.postedPayload.email || result.email;
-            return res.redirect('https://members.bigbudget.com/checkout-page?offerId=' + result.offerId + '&productId=' + result.productId +'&email=' + result.email);
+        } else {
+            // Extract offerId, productId, email - result can have different structures:
+            // 1. VRIO error (payment failed): postedPayload.offers[0], postedPayload.email
+            // 2. Early return from processUpsellByEmail: result.email, result.offerId, result.productId
+            // 3. Fallback to original request params (upsellDto)
+            const offerId = result?.postedPayload?.offers?.[0]?.offerId
+                || result?.postedPayload?.mainOfferId
+                || result?.offerId
+                || upsellDto.offerId;
+            const productId = result?.postedPayload?.offers?.[0]?.productId
+                || result?.postedPayload?.mainProductId
+                || result?.productId
+                || upsellDto.productId;
+            const email = result?.postedPayload?.email
+                || result?.email
+                || upsellDto.email;
+            return res.redirect(`https://members.bigbudget.com/checkout-page?offerId=${offerId}&productId=${productId}&email=${encodeURIComponent(email || '')}`);
         }
         
         // If failed, return error response
