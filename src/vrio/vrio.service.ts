@@ -306,6 +306,10 @@ export class VrioService {
       vrioPayload.tracking12 = prospectData.click_id;
     }
 
+    if (prospectData.tracking_id) {
+      vrioPayload.tracking15 = prospectData.tracking_id;
+    }
+
     if (prospectData.fpDeals) {
       vrioPayload.tracking14 = prospectData.fpDeals;
     }

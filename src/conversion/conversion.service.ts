@@ -855,6 +855,10 @@ export class ConversionService {
       prospectData.click_id = conversionDto.lastAttribution._ef_transaction_id;
     }
 
+    if (conversionDto.lastAttribution?.tracking_id) {
+      prospectData.tracking_id = conversionDto.lastAttribution.tracking_id;
+    }
+
     if (conversionDto.fpDeals) {
       prospectData.fpDeals = conversionDto.fpDeals;
     }
@@ -939,6 +943,10 @@ export class ConversionService {
 
     if (conversionDto.lastAttribution?._ef_transaction_id) {
       checkoutData.click_id = conversionDto.lastAttribution._ef_transaction_id;
+    }
+
+    if (conversionDto.lastAttribution?.tracking_id) {
+      checkoutData.tracking_id = conversionDto.lastAttribution.tracking_id;
     }
 
     return checkoutData;
@@ -1181,6 +1189,9 @@ export class ConversionService {
         vrioPayload.tracking14 = conversionDto.fpDeals;
       }
 
+      if (conversionDto.lastAttribution?.tracking_id) {
+        vrioPayload.tracking15 = conversionDto.lastAttribution.tracking_id;
+      }
       if (conversionDto.lastAttribution?.c2) {
         vrioPayload.tracking10 = conversionDto.lastAttribution.c2;
       }
@@ -1509,6 +1520,7 @@ export class ConversionService {
     if (lastOrderToUse.tracking12) lastAttribution._ef_transaction_id = lastOrderToUse.tracking12;
     if (lastOrderToUse.tracking10) lastAttribution.c2 = lastOrderToUse.tracking10;
     if (lastOrderToUse.tracking11) lastAttribution.c3 = lastOrderToUse.tracking11;
+    if (lastOrderToUse.tracking15) lastAttribution.tracking_id = lastOrderToUse.tracking15;
 
     // Construct ConversionDto for upsell
     const conversionDto: ConversionDto = {
