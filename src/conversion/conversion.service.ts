@@ -1200,6 +1200,14 @@ export class ConversionService {
         vrioPayload.tracking11 = conversionDto.lastAttribution.c3;
       }
 
+      if (attr.funnelId) {
+        vrioPayload.tracking16 = attr.funnelId;
+      }
+
+      if (attr.nodeId) {
+        vrioPayload.tracking17 = attr.nodeId;
+      }
+
     }
 
     return vrioPayload;
@@ -1521,6 +1529,8 @@ export class ConversionService {
     if (lastOrderToUse.tracking10) lastAttribution.c2 = lastOrderToUse.tracking10;
     if (lastOrderToUse.tracking11) lastAttribution.c3 = lastOrderToUse.tracking11;
     if (lastOrderToUse.tracking15) lastAttribution.tracking_id = lastOrderToUse.tracking15;
+    if (lastOrderToUse.tracking16) lastAttribution.funnelId = lastOrderToUse.tracking16;
+    if (lastOrderToUse.tracking17) lastAttribution.nodeId = lastOrderToUse.tracking17;
 
     // Construct ConversionDto for upsell
     const conversionDto: ConversionDto = {

@@ -285,6 +285,14 @@ export class VrioService {
       if (attr.utm_medium) {
         vrioPayload.tracking8 = attr.utm_medium;
       }
+
+      if (attr.funnelId) {
+        vrioPayload.tracking16 = attr.funnelId;
+      }
+
+      if (attr.nodeId) {
+        vrioPayload.tracking17 = attr.nodeId;
+      }
     }
 
     // tracking9: reason_for_buying
