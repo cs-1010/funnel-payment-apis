@@ -574,7 +574,12 @@ export class VrioService {
       
       // If the upsell offer is of type 2, force route_id = 5 when adding the order.
       // (Matches: GET /offers/{offerId} -> offer_type_id === 2)
-      if (vrioPayload && !('route_id' in vrioPayload)) {
+      // Skip for campaigns 32 and 101 (do not set route_id / skip offer lookup for route).
+      const campaignIdForRoute = Number(vrioPayload?.campaign_id);
+      const skipRouteIdForCampaign =
+        campaignIdForRoute === 32 || campaignIdForRoute === 101;
+
+      if (vrioPayload && !('route_id' in vrioPayload) && !skipRouteIdForCampaign) {
         const firstOfferId = Array.isArray(vrioPayload.offers) ? vrioPayload.offers?.[0]?.offer_id : undefined;
         const offerIdAsNumber =
           typeof firstOfferId === 'number'
