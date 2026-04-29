@@ -1,4 +1,6 @@
 import {  Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { safeJsonForLog } from '../common/utils/sanitize-for-log';
 import { ConversionDto } from './dto/conversion.dto';
 import { StickyService } from '../sticky/sticky.service';
 import { VrioService } from '../vrio/vrio.service';
@@ -13,7 +15,9 @@ import { ConversionType } from './dto/conversion.dto';
 @Injectable()
 export class ConversionService {
   private readonly logger = new Logger(ConversionService.name);
-  
+  /** When true: `[bump-checkout]` diagnostic logs. Default off — set `VERBOSE_CHECKOUT_LOG=true` for debugging. */
+  private readonly verboseCheckoutLog: boolean;
+
   private failureReasons: string[] = [];
   private generateUniqueId(): string {
     return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -24,7 +28,11 @@ export class ConversionService {
     private readonly jobService: JobService,
     private readonly activeCampaignService: ActiveCampaignService,
   
-    private readonly httpService: HttpService) {
+    private readonly httpService: HttpService,
+    private readonly configService: ConfigService,
+  ) {
+    const v = this.configService.get<string>('VERBOSE_CHECKOUT_LOG');
+    this.verboseCheckoutLog = v === 'true' || v === '1';
     this.shippingId = 2; // Default value, as free shipping
     this.failureReasons = [
       "Insufficient Funds",
@@ -295,8 +303,24 @@ export class ConversionService {
       const vrioPayload = this.mapToVrioCheckoutFormat(conversionDto);
       const filteredOffers = this.filterOffers(conversionDto);
 
+      // If bump is selected, charge it as a separate upsell only after main checkout succeeds.
+      // (Funnel payload may not mark bump with isTrial: true even when VRIO treats it as trial.)
+      const shouldChargeBumpAsUpsell = Boolean(filteredOffers.bumpOffer);
+
+      if (shouldChargeBumpAsUpsell) {
+        this.logBumpCheckout('decision', {
+          charge_bump_as_separate_upsell: true,
+          bump_offer_id: filteredOffers.bumpOffer?.offerId ?? null,
+          bump_product_id: filteredOffers.bumpOffer?.productId ?? null,
+          main_offer_resolved: !!filteredOffers.mainOffer,
+        });
+      }
+
       // Prepare offers for initial checkout attempt (defensive)
-      const initialOffers = [filteredOffers.mainOffer, filteredOffers.bumpOffer].filter(Boolean);
+      const initialOffers = [
+        filteredOffers.mainOffer,
+        shouldChargeBumpAsUpsell ? null : filteredOffers.bumpOffer,
+      ].filter(Boolean);
       if (initialOffers.length === 0) {
         const noOfferQueue = this.prepareQueueData({
           error: 'No valid offers found after filtering',
@@ -309,7 +333,14 @@ export class ConversionService {
       // Convert offers to VRIO format
       vrioPayload.offers = this.convertOffersToVrioFormat(initialOffers);
 
-      //this.logger.log('Processing checkout with offers:', vrioPayload.offers);  
+      if (shouldChargeBumpAsUpsell) {
+        this.logBumpCheckout('main_checkout_payload', {
+          prev_order_id: conversionDto.prevOrderId,
+          customer_id: conversionDto.customerId,
+          main_offer_ids: (vrioPayload.offers || []).map((o: any) => o.offer_id),
+          bump_excluded: true,
+        });
+      }
 
       const response = await this.vrioService.processCheckout(conversionDto.prevOrderId.toString(), vrioPayload);
 
@@ -321,6 +352,92 @@ export class ConversionService {
       
 
       if (response?.order_id) {
+        if (shouldChargeBumpAsUpsell && filteredOffers.bumpOffer) {
+          this.logBumpCheckout('main_checkout_ok', {
+            order_id: response.order_id,
+            customer_card_id_from_main:
+              this.extractCustomerCardIdFromMainResponse(response) ?? null,
+            has_customer_card_id: !!(
+              this.extractCustomerCardIdFromMainResponse(response) ??
+              conversionDto.cardId ??
+              conversionDto.customerCardId ??
+              conversionDto.creditCardId
+            ),
+            transaction_count: Array.isArray(response.transactions)
+              ? response.transactions.length
+              : 0,
+          });
+          try {
+            const mainOfferId = filteredOffers.mainOffer?.offerId
+              ? parseInt(filteredOffers.mainOffer.offerId?.toString())
+              : parseInt(conversionDto.mainOfferId?.toString());
+
+            const resolvedCardId =
+              this.extractCustomerCardIdFromMainResponse(response) ??
+              conversionDto.cardId ??
+              conversionDto.customerCardId ??
+              conversionDto.creditCardId;
+
+            const resolvedBillingId =
+              this.extractBillingAddressIdFromMainResponse(response) ??
+              conversionDto.customerAdressBillingId ??
+              conversionDto.customerBillingId ??
+              conversionDto.customerId;
+
+            const bumpUpsellPayload: any = {
+              connection_id: 1,
+              campaign_id: conversionDto.stickyCampaignId || 2,
+              customer_id: conversionDto.customerId,
+              customers_address_billing_id: resolvedBillingId,
+              customer_card_id: resolvedCardId,
+              action: 'process',
+              payment_method_id: 1,
+              offers: [
+                {
+                  offer_id: parseInt(filteredOffers.bumpOffer.offerId?.toString()),
+                  order_offer_quantity: filteredOffers.bumpOffer.quantity || 1,
+                  item_id: parseInt(filteredOffers.bumpOffer.productId?.toString()),
+                  order_offer_upsell: true,
+                  parent_offer_id: mainOfferId,
+                  parent_order_id: response.order_id,
+                },
+              ],
+            };
+
+            this.applyUpsellTrackingFromConversionDto(bumpUpsellPayload, conversionDto);
+            this.overlayTrackingFromMainOrderResponse(bumpUpsellPayload, response);
+
+            // Best-effort: if merchant_id is present in the response, pass it through.
+            const merchantId =
+              response.order?.transactions?.[0]?.merchant_id ??
+              response.order?.transactions?.[0]?.merchant?.merchant_id ??
+              response.transactions?.[0]?.merchant_id ??
+              response.transactions?.[0]?.merchant?.merchant_id;
+            if (merchantId) bumpUpsellPayload.merchant_id = merchantId;
+
+            this.logBumpCheckout('bump_upsell_request', this.summarizeBumpUpsellPayload(bumpUpsellPayload));
+
+            const bumpRes = await this.vrioService.processUpsell(bumpUpsellPayload, {
+              minimalLog: true,
+            });
+
+            this.logBumpCheckout('bump_upsell_result', {
+              main_order_id: response.order_id,
+              bump_order_id: bumpRes?.order_id ?? null,
+              payment_failed: bumpRes?.payment_failed ?? null,
+              http_status: bumpRes?.http_status ?? null,
+              error_preview:
+                bumpRes?.error != null ? String(bumpRes.error).slice(0, 240) : null,
+            });
+          } catch (e) {
+            // Bump upsell failures do not block main checkout success.
+            this.logBumpCheckout('bump_upsell_exception', {
+              main_order_id: response.order_id,
+              message: e instanceof Error ? e.message : String(e),
+            });
+          }
+        }
+
         if(conversionDto.conversionType === ConversionType.UPSELL){
           await this.jobService.createJob(JobType.UPSELL_SALE, queueData);
         }else{
@@ -330,10 +447,6 @@ export class ConversionService {
       } else {
         await this.jobService.createJob(JobType.FAILED_SALE, queueData);
 
-        this.logger.log('response 1.', response);
-        this.logger.log('fallback offers length 2.',filteredOffers.fallbackOffers.length );
-        this.logger.log('should handle fallback 3.', this.shouldHandleFallback(response));
-      
         // Check if we should try fallback offers
         if (response && this.shouldHandleFallback(response) && filteredOffers.fallbackOffers.length > 0) {
           this.logger.log(`Main offer failed, trying ${filteredOffers.fallbackOffers.length} fallback offers`);
@@ -342,11 +455,90 @@ export class ConversionService {
             conversionDto, 
             vrioPayload, 
             filteredOffers.fallbackOffers, 
-            filteredOffers.bumpOffer
+            shouldChargeBumpAsUpsell ? null : filteredOffers.bumpOffer
           );
           
           if (fallbackResponse?.order_id) {
             this.logger.log('Fallback offer succeeded');
+
+            if (shouldChargeBumpAsUpsell && filteredOffers.bumpOffer) {
+              this.logBumpCheckout('main_checkout_ok_fallback', {
+                order_id: fallbackResponse.order_id,
+                is_fallback: true,
+              });
+              try {
+                const parentOfferId =
+                  (fallbackResponse as any)?.__successful_offer_id
+                    ? parseInt((fallbackResponse as any).__successful_offer_id.toString())
+                    : parseInt(conversionDto.mainOfferId?.toString());
+
+                const resolvedCardIdFb =
+                  this.extractCustomerCardIdFromMainResponse(fallbackResponse) ??
+                  conversionDto.cardId ??
+                  conversionDto.customerCardId ??
+                  conversionDto.creditCardId;
+
+                const resolvedBillingIdFb =
+                  this.extractBillingAddressIdFromMainResponse(fallbackResponse) ??
+                  conversionDto.customerAdressBillingId ??
+                  conversionDto.customerBillingId ??
+                  conversionDto.customerId;
+
+                const bumpUpsellPayload: any = {
+                  connection_id: 1,
+                  campaign_id: conversionDto.stickyCampaignId || 2,
+                  customer_id: conversionDto.customerId,
+                  customers_address_billing_id: resolvedBillingIdFb,
+                  customer_card_id: resolvedCardIdFb,
+                  action: 'process',
+                  payment_method_id: 1,
+                  offers: [
+                    {
+                      offer_id: parseInt(filteredOffers.bumpOffer.offerId?.toString()),
+                      order_offer_quantity: filteredOffers.bumpOffer.quantity || 1,
+                      item_id: parseInt(filteredOffers.bumpOffer.productId?.toString()),
+                      order_offer_upsell: true,
+                      parent_offer_id: parentOfferId,
+                      parent_order_id: fallbackResponse.order_id,
+                    },
+                  ],
+                };
+
+                this.applyUpsellTrackingFromConversionDto(bumpUpsellPayload, conversionDto);
+                this.overlayTrackingFromMainOrderResponse(bumpUpsellPayload, fallbackResponse);
+
+                const merchantId =
+                  fallbackResponse.order?.transactions?.[0]?.merchant_id ??
+                  fallbackResponse.order?.transactions?.[0]?.merchant?.merchant_id ??
+                  fallbackResponse.transactions?.[0]?.merchant_id ??
+                  fallbackResponse.transactions?.[0]?.merchant?.merchant_id;
+                if (merchantId) bumpUpsellPayload.merchant_id = merchantId;
+
+                this.logBumpCheckout('bump_upsell_request_fallback', this.summarizeBumpUpsellPayload(bumpUpsellPayload));
+
+                const bumpRes = await this.vrioService.processUpsell(bumpUpsellPayload, {
+                  minimalLog: true,
+                });
+
+                this.logBumpCheckout('bump_upsell_result_fallback', {
+                  main_order_id: fallbackResponse.order_id,
+                  bump_order_id: bumpRes?.order_id ?? null,
+                  payment_failed: bumpRes?.payment_failed ?? null,
+                  http_status: bumpRes?.http_status ?? null,
+                  error_preview:
+                    bumpRes?.error != null ? String(bumpRes.error).slice(0, 240) : null,
+                });
+              } catch (e) {
+                this.logBumpCheckout('bump_upsell_exception_fallback', {
+                  main_order_id: fallbackResponse.order_id,
+                  message: e instanceof Error ? e.message : String(e),
+                });
+              }
+            }
+
+            if ((fallbackResponse as any)?.__successful_offer_id) {
+              delete (fallbackResponse as any).__successful_offer_id;
+            }
             const fallbackQueueData = this.prepareQueueData(fallbackResponse, conversionDto, vrioPayload);
             await this.jobService.createJob(JobType.SALE, fallbackQueueData);
             return {
@@ -431,16 +623,12 @@ export class ConversionService {
       return { error_message: 'Previous order ID is required for upsell', error_found: "1" };
     }
 
-    this.logger.log('Processing upsell with VRIO');
-
-  
     // Map to VRIO format and use VRIO service for upsell
     const vrioPayload = this.mapToVrioUpsellFormat(conversionDto);
 
     
     const filteredOffers = this.filterOffers(conversionDto);
 
-    //return conversionDto;
     // Prepare offers for initial upsell attempt (defensive)
     const initialOffers = [filteredOffers.mainOffer, filteredOffers.bumpOffer].filter(Boolean);
     if (initialOffers.length === 0) {
@@ -461,27 +649,6 @@ export class ConversionService {
       
     };
     
-    this.logger.log('updatedVrioPayload', vrioPayload);
-    
-    // Log payment details before charging
-    const paymentDetails: any = {
-      customerId: conversionDto.customerId,
-      prevOrderId: conversionDto.prevOrderId,
-      offers: conversionDto.offers,
-    };
-    
-    if (conversionDto.merchantId) {
-      paymentDetails.merchant_id = conversionDto.merchantId;
-      this.logger.log(`Charging with merchant_id: ${conversionDto.merchantId}`);
-    } else {
-      paymentDetails.creditCardId = conversionDto.creditCardId;
-      paymentDetails.cardId = conversionDto.cardId;
-      this.logger.log(`Charging with creditCardId: ${conversionDto.creditCardId}, cardId: ${conversionDto.cardId}`);
-    }
-    
-    this.logger.log('Payment details before charging:', JSON.stringify(paymentDetails, null, 2));
-    
-   
     // Use VRIO service for upsell
     const response = await this.vrioService.processUpsell(updatedVrioPayload);
 
@@ -534,6 +701,33 @@ export class ConversionService {
     return [];
   }
 
+  /** Structured logs for bump-as-upsell-after-main flow (`grep [bump-checkout]`). */
+  private logBumpCheckout(step: string, meta?: Record<string, unknown>): void {
+    if (!this.verboseCheckoutLog) return;
+    const suffix =
+      meta && Object.keys(meta).length > 0 ? `: ${safeJsonForLog(meta)}` : '';
+    this.logger.log(`[bump-checkout] ${step}${suffix}`);
+  }
+
+  private summarizeBumpUpsellPayload(p: any): Record<string, unknown> {
+    return {
+      campaign_id: p?.campaign_id,
+      customer_id: p?.customer_id,
+      merchant_id: p?.merchant_id,
+      route_id: p?.route_id,
+      customers_address_billing_id: p?.customers_address_billing_id,
+      customer_card_id: p?.customer_card_id,
+      offers: Array.isArray(p?.offers)
+        ? p.offers.map((o: any) => ({
+            offer_id: o.offer_id,
+            item_id: o.item_id,
+            parent_offer_id: o.parent_offer_id,
+            parent_order_id: o.parent_order_id,
+            order_offer_upsell: o.order_offer_upsell,
+          }))
+        : [],
+    };
+  }
 
   private shouldHandleFallback(data: any): boolean {
     if (!data || !data.error) {
@@ -586,6 +780,7 @@ export class ConversionService {
           return { 
             ...response, 
             isFallback: true, 
+            __successful_offer_id: fallbackOffer.offerId,
             fallbackPriority: fallbackOffer.priority,
             fallbackProductName: fallbackOffer.productName
           };
@@ -1130,6 +1325,82 @@ export class ConversionService {
   }
 
   /**
+   * VRIO often nests the saved order under `order` on checkout/transaction responses.
+   * Prefer those IDs for follow-up upsell calls (e.g. bump after main).
+   */
+  private extractCustomerCardIdFromMainResponse(mainResponse: any): number | undefined {
+    const candidates = [
+      mainResponse?.order?.customer_card_id,
+      mainResponse?.customer_card_id,
+      mainResponse?.customer_card?.customer_card_id,
+    ];
+    for (const c of candidates) {
+      if (c == null || c === '') continue;
+      const n = typeof c === 'number' ? c : parseInt(String(c), 10);
+      if (!Number.isNaN(n)) return n;
+    }
+    return undefined;
+  }
+
+  private extractBillingAddressIdFromMainResponse(mainResponse: any): number | undefined {
+    const candidates = [
+      mainResponse?.order?.customers_address_billing_id,
+      mainResponse?.customers_address_billing_id,
+    ];
+    for (const c of candidates) {
+      if (c == null || c === '') continue;
+      const n = typeof c === 'number' ? c : parseInt(String(c), 10);
+      if (!Number.isNaN(n)) return n;
+    }
+    return undefined;
+  }
+
+  /** Copy tracking1–tracking20 from the completed order when present (authoritative on VRIO side). */
+  private overlayTrackingFromMainOrderResponse(payload: any, mainResponse: any): void {
+    const order = mainResponse?.order ?? mainResponse;
+    if (!order || typeof order !== 'object') return;
+    for (let i = 1; i <= 20; i++) {
+      const key = `tracking${i}` as const;
+      const v = order[key];
+      if (v != null && v !== '') {
+        payload[key] = v;
+      }
+    }
+  }
+
+  /** Same tracking mapping as upsell flow — from funnel attribution + fpDeals. */
+  private applyUpsellTrackingFromConversionDto(payload: any, conversionDto: ConversionDto): void {
+    if (!conversionDto.lastAttribution) return;
+
+    const attr = conversionDto.lastAttribution;
+
+    if (attr.utm_campaign) payload.tracking1 = attr.utm_campaign;
+    if (attr.utm_source) payload.tracking2 = attr.utm_source;
+    if (attr.h_ad_id) payload.tracking3 = attr.h_ad_id;
+    if (attr.adid) payload.tracking4 = attr.adid;
+    if (attr.gc_id) payload.tracking5 = attr.gc_id;
+    if (attr.campaign_id) payload.tracking6 = attr.campaign_id;
+
+    if (conversionDto.lastAttribution?._ef_transaction_id) {
+      payload.tracking12 = conversionDto.lastAttribution._ef_transaction_id;
+    }
+    if (conversionDto.fpDeals) {
+      payload.tracking14 = conversionDto.fpDeals;
+    }
+    if (conversionDto.lastAttribution?.tracking_id) {
+      payload.tracking15 = conversionDto.lastAttribution.tracking_id;
+    }
+    if (conversionDto.lastAttribution?.c2) {
+      payload.tracking10 = conversionDto.lastAttribution.c2;
+    }
+    if (conversionDto.lastAttribution?.c3) {
+      payload.tracking11 = conversionDto.lastAttribution.c3;
+    }
+    if (attr.funnelId) payload.tracking16 = attr.funnelId;
+    if (attr.nodeId) payload.tracking17 = attr.nodeId;
+  }
+
+  /**
    * Map upsell data to VRIO upsell format
    */
   private mapToVrioUpsellFormat(conversionDto: ConversionDto): any {
@@ -1147,68 +1418,7 @@ export class ConversionService {
       vrioPayload.merchant_id = conversionDto.merchantId;
     }
 
-    // Map tracking fields from lastAttribution
-    if (conversionDto.lastAttribution) {
-      const attr = conversionDto.lastAttribution;
-      
-      // tracking1: utm_campaign
-      if (attr.utm_campaign) {
-        vrioPayload.tracking1 = attr.utm_campaign;
-      }
-      
-      // tracking2: utm_source
-      if (attr.utm_source) {
-        vrioPayload.tracking2 = attr.utm_source;
-      }
-      
-      // tracking3: h_ad_id
-      if (attr.h_ad_id) {
-        vrioPayload.tracking3 = attr.h_ad_id;
-      }
-      
-      // tracking4: adid
-      if (attr.adid) {
-        vrioPayload.tracking4 = attr.adid;
-      }
-      
-      // tracking5: gc_id
-      if (attr.gc_id) {
-        vrioPayload.tracking5 = attr.gc_id;
-      }
-      
-      // tracking6: campaign_id
-      if (attr.campaign_id) {
-        vrioPayload.tracking6 = attr.campaign_id;
-      }
-
-      if (conversionDto.lastAttribution?._ef_transaction_id) {
-        vrioPayload.tracking12 = conversionDto.lastAttribution._ef_transaction_id;
-      }
-
-      if (conversionDto.fpDeals) {
-        vrioPayload.tracking14 = conversionDto.fpDeals;
-      }
-
-      if (conversionDto.lastAttribution?.tracking_id) {
-        vrioPayload.tracking15 = conversionDto.lastAttribution.tracking_id;
-      }
-      if (conversionDto.lastAttribution?.c2) {
-        vrioPayload.tracking10 = conversionDto.lastAttribution.c2;
-      }
-
-      if (conversionDto.lastAttribution?.c3) {
-        vrioPayload.tracking11 = conversionDto.lastAttribution.c3;
-      }
-
-      if (attr.funnelId) {
-        vrioPayload.tracking16 = attr.funnelId;
-      }
-
-      if (attr.nodeId) {
-        vrioPayload.tracking17 = attr.nodeId;
-      }
-
-    }
+    this.applyUpsellTrackingFromConversionDto(vrioPayload, conversionDto);
 
     return vrioPayload;
   }
@@ -1412,7 +1622,7 @@ export class ConversionService {
     // Fetch customer and last order from VRIO API
     const { customer, lastOrder } = await this.vrioService.getCustomerAndLastOrderByEmail(email);
     
-    this.logger.log(`lastOrder: ${JSON.stringify(lastOrder)}`);
+    this.logger.log(`lastOrder: ${safeJsonForLog(lastOrder)}`);
 
     
     if (!lastOrder || !lastOrder.order_id) {

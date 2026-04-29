@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Job, JobDocument } from '../schemas/job.schema';
 import { JobStatus, JobType } from '../dto/create-job.dto';
+import { safeJsonForLog } from '../utils/sanitize-for-log';
 
 @Injectable()
 export class JobService {
@@ -15,7 +16,9 @@ export class JobService {
   async createJob(jobType: JobType, jobData: any) {
     // Validate required fields
     if (!jobType || !jobData) {
-      this.logger.error('Missing required fields for job creation', { jobType, jobData });
+      this.logger.error(
+        `Missing required fields for job creation: ${safeJsonForLog({ jobType, jobData })}`,
+      );
       throw new Error('Missing required fields for job creation');
     }
 

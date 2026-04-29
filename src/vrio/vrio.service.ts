@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
 import { AxiosResponse } from 'axios';
 import * as https from 'https';
+import { safeJsonForLog } from '../common/utils/sanitize-for-log';
 
 // Define interfaces for VRIO API responses
 export interface VrioApiResponse {
@@ -61,6 +62,8 @@ export class VrioService {
   private readonly logger = new Logger(VrioService.name);
   private readonly apiUrl: string;
   private readonly apiKey: string;
+  /** Bump/checkout diagnostics (full upsell body, etc.). Off unless `VERBOSE_CHECKOUT_LOG=true`. */
+  private readonly verboseCheckoutLog: boolean;
 
   constructor(
     private readonly httpService: HttpService,
@@ -68,7 +71,9 @@ export class VrioService {
   ) {
     this.apiUrl = this.configService.get<string>('VRIO_API_URL') || '';
     this.apiKey = this.configService.get<string>('VRIO_API_KEY') || '';
-    
+    const v = this.configService.get<string>('VERBOSE_CHECKOUT_LOG');
+    this.verboseCheckoutLog = v === 'true' || v === '1';
+
     this.logger.log(`VRIO API URL: ${this.apiUrl}`);
     this.logger.log(`VRIO API Key configured: ${!!this.apiKey}`);
     
@@ -101,7 +106,6 @@ export class VrioService {
   async createProspect(prospectData: any): Promise<VrioApiResponse | null> {
     // Use the correct endpoint format: VRIO_API_URL + "/orders"
     const apiUrl = `${this.apiUrl}/orders`;
-    console.log('apiUrl', apiUrl);
     try {
       this.logger.log(`Creating prospect in VRIO for email: ${prospectData.email || 'unknown'}`);
       
@@ -137,9 +141,9 @@ export class VrioService {
             } else if (httpError.response.data.error) {
               errorMessage = typeof httpError.response.data.error === 'string' 
                 ? httpError.response.data.error 
-                : JSON.stringify(httpError.response.data.error);
+                : safeJsonForLog(httpError.response.data.error);
             } else {
-              errorMessage = JSON.stringify(httpError.response.data);
+              errorMessage = safeJsonForLog(httpError.response.data);
             }
           }
           
@@ -166,7 +170,7 @@ export class VrioService {
         return response.data;
       } else {
         // Handle failed prospect creation - VRIO returns error details in response body
-        this.logger.warn(`VRIO prospect creation failed: ${JSON.stringify(response.data)}`);
+        this.logger.warn(`VRIO prospect creation failed: ${safeJsonForLog(response.data)}`);
         
         // Check if there's a specific error message in the response
         let errorMessage = 'Prospect creation failed';
@@ -177,7 +181,7 @@ export class VrioService {
         } else if (response.data.error) {
           errorMessage = typeof response.data.error === 'string' 
             ? response.data.error 
-            : JSON.stringify(response.data.error);
+            : safeJsonForLog(response.data.error);
         }
         
         // Return the response data with error information instead of null
@@ -203,9 +207,9 @@ export class VrioService {
         } else if (error.response.data.errors) {
           errorMessage = Array.isArray(error.response.data.errors) 
             ? error.response.data.errors.join(', ') 
-            : JSON.stringify(error.response.data.errors);
+            : safeJsonForLog(error.response.data.errors);
         } else {
-          errorMessage = JSON.stringify(error.response.data);
+          errorMessage = safeJsonForLog(error.response.data);
         }
       } else if (error.message) {
         errorMessage = error.message;
@@ -381,9 +385,9 @@ export class VrioService {
             } else if (httpError.response.data.error) {
               errorMessage = typeof httpError.response.data.error === 'string' 
                 ? httpError.response.data.error 
-                : JSON.stringify(httpError.response.data.error);
+                : safeJsonForLog(httpError.response.data.error);
             } else {
-              errorMessage = JSON.stringify(httpError.response.data);
+              errorMessage = safeJsonForLog(httpError.response.data);
             }
           }
           
@@ -420,7 +424,7 @@ export class VrioService {
         } else if (response.data.error) {
           errorMessage = typeof response.data.error === 'string' 
             ? response.data.error 
-            : JSON.stringify(response.data.error);
+            : safeJsonForLog(response.data.error);
         }
         
         // Return the response data with error information instead of throwing exception
@@ -448,13 +452,13 @@ export class VrioService {
           // If error is a string or other type
           errorMessage = typeof error.response.data.error === 'string' 
             ? error.response.data.error 
-            : JSON.stringify(error.response.data.error);
+            : safeJsonForLog(error.response.data.error);
         } else if (error.response.data.errors) {
           errorMessage = Array.isArray(error.response.data.errors) 
             ? error.response.data.errors.join(', ') 
-            : JSON.stringify(error.response.data.errors);
+            : safeJsonForLog(error.response.data.errors);
         } else {
-          errorMessage = JSON.stringify(error.response.data);
+          errorMessage = safeJsonForLog(error.response.data);
         }
       } else if (error.message) {
         errorMessage = error.message;
@@ -546,9 +550,12 @@ export class VrioService {
   /**
    * Process upsell in VRIO
    */
-  async processUpsell(upsellData: any): Promise<VrioApiResponse | null> {
+  async processUpsell(
+    upsellData: any,
+    options?: { minimalLog?: boolean },
+  ): Promise<VrioApiResponse | null> {
     const apiUrl = `${this.apiUrl}/orders`;
-    console.log('VRIO upsell apiUrl', apiUrl);
+    const minimalLog = !!options?.minimalLog;
 
     try {
       //this.logger.log(`Processing upsell in VRIO for customer: ${upsellData.customerId}`);
@@ -565,9 +572,36 @@ export class VrioService {
       // Map the data to VRIO upsell format
       const vrioPayload = this.mapToVrioUpsellFormat(upsellData);
       
+      // If the upsell offer is of type 2, force route_id = 5 when adding the order.
+      // (Matches: GET /offers/{offerId} -> offer_type_id === 2)
+      if (vrioPayload && !('route_id' in vrioPayload)) {
+        const firstOfferId = Array.isArray(vrioPayload.offers) ? vrioPayload.offers?.[0]?.offer_id : undefined;
+        const offerIdAsNumber =
+          typeof firstOfferId === 'number'
+            ? firstOfferId
+            : typeof firstOfferId === 'string'
+              ? parseInt(firstOfferId, 10)
+              : undefined;
+
+        if (offerIdAsNumber) {
+          try {
+            const offer = await this.getOfferById(offerIdAsNumber);
+            if (offer && Number(offer.offer_type_id) === 2) {
+              (vrioPayload as any).route_id = 5;
+            }
+          } catch (e) {
+            // Don't block upsell processing if offer lookup fails
+            this.logger.warn(`Failed to lookup offer ${offerIdAsNumber} for route_id decision`);
+          }
+        }
+      }
+
       const authConfig = this.getAuthConfig();
-      
-      
+
+      if (this.verboseCheckoutLog) {
+        this.logger.log(`VRIO upsell POST body: ${safeJsonForLog(vrioPayload)}`);
+      }
+
       let response: AxiosResponse<VrioApiResponse>;
       try {
         response = await firstValueFrom(
@@ -590,9 +624,9 @@ export class VrioService {
             } else if (httpError.response.data.error) {
               errorMessage = typeof httpError.response.data.error === 'string' 
                 ? httpError.response.data.error 
-                : JSON.stringify(httpError.response.data.error);
+                : safeJsonForLog(httpError.response.data.error);
             } else {
-              errorMessage = JSON.stringify(httpError.response.data);
+              errorMessage = safeJsonForLog(httpError.response.data);
             }
           }
           
@@ -612,16 +646,32 @@ export class VrioService {
         }
       }
 
-      this.logger.log(`VRIO upsell API Response Status: ${response.status}`);
-      this.logger.log(`VRIO upsell API Response Data:`, JSON.stringify(response.data, null, 2));
+      if (!minimalLog && this.verboseCheckoutLog) {
+        this.logger.log(`VRIO upsell API Response Status: ${response.status}`);
+        this.logger.log(`VRIO upsell API Response Data: ${safeJsonForLog(response.data, true)}`);
+      }
 
       // Check for successful response - VRIO returns order_id on success
       if (response.data.order_id && response.status >= 200 && response.status < 300) {
-        this.logger.log(`VRIO upsell successful - Order ID: ${response.data.order_id}, Customer ID: ${response.data.customer_id}`);
+        if (this.verboseCheckoutLog) {
+          if (minimalLog) {
+            this.logger.log(
+              `VRIO upsell ok order_id=${response.data.order_id} customer_id=${response.data.customer_id}`,
+            );
+          } else {
+            this.logger.log(
+              `VRIO upsell successful - Order ID: ${response.data.order_id}, Customer ID: ${response.data.customer_id}`,
+            );
+          }
+        }
         return response.data;
       } else {
         // Handle failed upsell - VRIO returns error details in response body
-        this.logger.warn(`VRIO upsell failed: ${JSON.stringify(response.data)}`);
+        this.logger.warn(
+          minimalLog
+            ? `VRIO upsell no order_id status=${response.status}`
+            : `VRIO upsell failed: ${safeJsonForLog(response.data)}`,
+        );
         
         // Check if there's a specific error message in the response
         let errorMessage = 'Upsell processing failed';
@@ -632,7 +682,7 @@ export class VrioService {
         } else if (response.data.error) {
           errorMessage = typeof response.data.error === 'string' 
             ? response.data.error 
-            : JSON.stringify(response.data.error);
+            : safeJsonForLog(response.data.error);
         }
         
         // Return the response data with error information instead of null
@@ -644,40 +694,60 @@ export class VrioService {
         };
       }
     } catch (error) {
-      this.logger.error('Full error object:', error);
-      this.logger.error('Error response:', error.response);
-      this.logger.error('Error response data:', error.response?.data);
-      this.logger.error('Error message:', error.message);
-      
       // Better error message extraction
       let errorMessage = 'Unknown error';
-      
-      if (error.response?.data) {
-        this.logger.error('Response data type:', typeof error.response.data);
-        this.logger.error('Response data stringified:', JSON.stringify(error.response.data));
-        
-        if (typeof error.response.data === 'string') {
-          errorMessage = error.response.data;
-        } else if (error.response.data.message) {
-          errorMessage = error.response.data.message;
-        } else if (error.response.data.error) {
-          errorMessage = error.response.data.error;
-        } else if (error.response.data.errors) {
-          errorMessage = Array.isArray(error.response.data.errors) 
-            ? error.response.data.errors.join(', ') 
-            : JSON.stringify(error.response.data.errors);
-        } else {
-          errorMessage = JSON.stringify(error.response.data);
+
+      if (minimalLog) {
+        if (error.response?.data) {
+          if (typeof error.response.data === 'string') {
+            errorMessage = error.response.data;
+          } else if (error.response.data.message) {
+            errorMessage = error.response.data.message;
+          } else if (error.response.data.error) {
+            errorMessage =
+              typeof error.response.data.error === 'string'
+                ? error.response.data.error
+                : safeJsonForLog(error.response.data.error);
+          } else {
+            errorMessage = safeJsonForLog(error.response.data);
+          }
+        } else if (error.message) {
+          errorMessage = error.message;
         }
-      } else if (error.message) {
-        errorMessage = error.message;
+        this.logger.error(
+          `VRIO upsell exception: ${errorMessage}${error.response?.status ? ` HTTP ${error.response.status}` : ''}`,
+        );
+      } else {
+        this.logger.error(`VRIO upsell error message: ${error.message}`);
+        if (error.response?.status) {
+          this.logger.error(`VRIO upsell HTTP status: ${error.response.status}`);
+        }
+        this.logger.error(`VRIO upsell error response data: ${safeJsonForLog(error.response?.data)}`);
+
+        if (error.response?.data) {
+          if (typeof error.response.data === 'string') {
+            errorMessage = error.response.data;
+          } else if (error.response.data.message) {
+            errorMessage = error.response.data.message;
+          } else if (error.response.data.error) {
+            errorMessage = error.response.data.error;
+          } else if (error.response.data.errors) {
+            errorMessage = Array.isArray(error.response.data.errors)
+              ? error.response.data.errors.join(', ')
+              : safeJsonForLog(error.response.data.errors);
+          } else {
+            errorMessage = safeJsonForLog(error.response.data);
+          }
+        } else if (error.message) {
+          errorMessage = error.message;
+        }
+
+        this.logger.error('Final error message:', errorMessage);
       }
-      
-      this.logger.error('Final error message:', errorMessage);
-      
+
       throw new HttpException(
-        `Failed to process upsell in VRIO: ${errorMessage}`, 
-        HttpStatus.INTERNAL_SERVER_ERROR
+        `Failed to process upsell in VRIO: ${errorMessage}`,
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
@@ -688,7 +758,6 @@ export class VrioService {
   private mapToVrioUpsellFormat(upsellData: any): any {
     // If the data is already in VRIO format (from conversion service), return it directly
     if (upsellData.connection_id && upsellData.customer_id && upsellData.offers) {
-      this.logger.log('Using pre-formatted VRIO upsell payload from conversion service',upsellData);
       return upsellData;
     }
 
@@ -803,8 +872,12 @@ export class VrioService {
       vrioPayload.offers = offers;
     }
 
-    this.logger.log('Final VRIO upsell payload:', JSON.stringify(vrioPayload, null, 2));
-   
+    if (this.verboseCheckoutLog) {
+      this.logger.log(
+        `VRIO upsell payload (built): campaign_id=${vrioPayload.campaign_id} customer_id=${vrioPayload.customer_id} offers=${vrioPayload.offers?.length ?? 0}`,
+      );
+    }
+
     return vrioPayload;
   }
 
@@ -895,7 +968,6 @@ export class VrioService {
    */
   async updateCustomer(customerId: number, customerData: { firstName?: string; lastName?: string }): Promise<VrioApiResponse | null> {
     const apiUrl = `${this.apiUrl}/customers/${customerId}`;
-    console.log('VRIO update customer apiUrl', apiUrl);
 
     try {
       this.logger.log(`Updating customer in VRIO for customer ID: ${customerId}`);
@@ -922,19 +994,7 @@ export class VrioService {
         return null;
       }
       
-      this.logger.log(`VRIO update customer payload:`, JSON.stringify(vrioPayload, null, 2));
-      this.logger.log(`VRIO update customer API URL:`, apiUrl);
-      this.logger.log(`VRIO API Key configured:`, !!this.apiKey);
-      this.logger.log(`VRIO API Key (first 10 chars):`, this.apiKey ? this.apiKey.substring(0, 10) + '...' : 'NOT SET');
-      
       const authConfig = this.getAuthConfig();
-      this.logger.log(`Auth config headers:`, authConfig.headers);
-      this.logger.log(`Full update customer request config:`, {
-        url: apiUrl,
-        method: 'PATCH',
-        headers: authConfig.headers,
-        data: vrioPayload
-      });
       
       let response: AxiosResponse<VrioApiResponse>;
       try {
@@ -942,37 +1002,33 @@ export class VrioService {
           this.httpService.patch<VrioApiResponse>(apiUrl, vrioPayload, authConfig)
         );
       } catch (httpError) {
-        this.logger.error('HTTP Request failed:', httpError);
-        this.logger.error('HTTP Error response:', httpError.response);
-        this.logger.error('HTTP Error status:', httpError.response?.status);
-        this.logger.error('HTTP Error data:', httpError.response?.data);
+        this.logger.error(
+          `VRIO update customer HTTP failed: ${httpError.response?.status ?? ''} ${safeJsonForLog(httpError.response?.data ?? httpError.message)}`,
+        );
         throw httpError; // Re-throw to be caught by outer catch block
       }
 
-      this.logger.log(`VRIO update customer API Response Status: ${response.status}`);
-      this.logger.log(`VRIO update customer API Response Data:`, JSON.stringify(response.data, null, 2));
+      this.logger.log(`VRIO update customer ok status=${response.status}`);
 
       // Check for successful response
       if (response.status >= 200 && response.status < 300) {
         this.logger.log(`VRIO customer update successful for customer ID: ${customerId}`);
         return response.data;
       } else {
-        this.logger.warn(`VRIO customer update failed: ${JSON.stringify(response.data)}`);
+        this.logger.warn(`VRIO customer update failed: ${safeJsonForLog(response.data)}`);
         return null;
       }
     } catch (error) {
-      this.logger.error('Full error object:', error);
-      this.logger.error('Error response:', error.response);
-      this.logger.error('Error response data:', error.response?.data);
-      this.logger.error('Error message:', error.message);
-      
+      this.logger.error(`VRIO update customer error message: ${error.message}`);
+      if (error.response?.status) {
+        this.logger.error(`VRIO update customer HTTP status: ${error.response.status}`);
+      }
+      this.logger.error(`VRIO update customer error response data: ${safeJsonForLog(error.response?.data)}`);
+
       // Better error message extraction
       let errorMessage = 'Unknown error';
       
       if (error.response?.data) {
-        this.logger.error('Response data type:', typeof error.response.data);
-        this.logger.error('Response data stringified:', JSON.stringify(error.response.data));
-        
         if (typeof error.response.data === 'string') {
           errorMessage = error.response.data;
         } else if (error.response.data.message) {
@@ -982,9 +1038,9 @@ export class VrioService {
         } else if (error.response.data.errors) {
           errorMessage = Array.isArray(error.response.data.errors) 
             ? error.response.data.errors.join(', ') 
-            : JSON.stringify(error.response.data.errors);
+            : safeJsonForLog(error.response.data.errors);
         } else {
-          errorMessage = JSON.stringify(error.response.data);
+          errorMessage = safeJsonForLog(error.response.data);
         }
       } else if (error.message) {
         errorMessage = error.message;
@@ -1100,13 +1156,13 @@ export class VrioService {
           
           return [];
         } catch (getError) {
-          this.logger.error(`GET /orders?customer_email failed. Status: ${getError.response?.status}, Error: ${JSON.stringify(getError.response?.data || getError.message)}`);
+          this.logger.error(`GET /orders?customer_email failed. Status: ${getError.response?.status}, Error: ${safeJsonForLog(getError.response?.data ?? getError.message)}`);
           throw getError;
         }
       }
     } catch (error) {
       this.logger.error(`Error fetching orders by email: ${error.message}`);
-      this.logger.error(`Error details: ${JSON.stringify(error.response?.data || {})}`);
+      this.logger.error(`Error details: ${safeJsonForLog(error.response?.data || {})}`);
       this.logger.error(`Error status: ${error.response?.status || 'N/A'}`);
       
       // If 404, return empty array (no orders found)
@@ -1116,7 +1172,7 @@ export class VrioService {
       
       // If 400, log more details and return null
       if (error.response?.status === 400) {
-        this.logger.error(`400 Bad Request - API might not support this endpoint. Response: ${JSON.stringify(error.response?.data)}`);
+        this.logger.error(`400 Bad Request - API might not support this endpoint. Response: ${safeJsonForLog(error.response?.data)}`);
         return null;
       }
       
@@ -1286,7 +1342,7 @@ export class VrioService {
           
           return null;
         } catch (getError) {
-          this.logger.error(`GET /customers?customer_email failed. Status: ${getError.response?.status}, Error: ${JSON.stringify(getError.response?.data || getError.message)}`);
+          this.logger.error(`GET /customers?customer_email failed. Status: ${getError.response?.status}, Error: ${safeJsonForLog(getError.response?.data ?? getError.message)}`);
           return null;
         }
       }
@@ -1357,6 +1413,32 @@ export class VrioService {
       }
     } catch (error) {
       this.logger.error(`Error fetching orders by customer ID: ${error.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Get offer by offer ID from VRIO.
+   *
+   * Matches the Postman call: GET {base_url}/offers/{offerId}.
+   * Returns null if the offer isn't found.
+   */
+  async getOfferById(offerId: number): Promise<any | null> {
+    try {
+      if (!offerId) {
+        throw new Error('Offer ID is required');
+      }
+
+      const authConfig = this.getAuthConfig();
+      const response = await firstValueFrom(
+        this.httpService.get(`${this.apiUrl}/offers/${offerId}`, authConfig),
+      );
+      return response.data ?? null;
+    } catch (error) {
+      if (error?.response?.status === 404) {
+        return null;
+      }
+      this.logger.error(`Error fetching offer by ID: ${error.message}`);
       return null;
     }
   }
