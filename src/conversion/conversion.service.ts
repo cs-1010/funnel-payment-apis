@@ -1054,8 +1054,8 @@ export class ConversionService {
       prospectData.tracking_id = conversionDto.lastAttribution.tracking_id;
     }
 
-    if (conversionDto.fpDeals) {
-      prospectData.fpDeals = conversionDto.fpDeals;
+    if (conversionDto.lastAttribution?.deal) {
+      prospectData.fpDeals = conversionDto.lastAttribution?.deal;
     }
      
 
