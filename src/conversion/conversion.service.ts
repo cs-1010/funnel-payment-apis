@@ -1384,8 +1384,8 @@ export class ConversionService {
     if (conversionDto.lastAttribution?._ef_transaction_id) {
       payload.tracking12 = conversionDto.lastAttribution._ef_transaction_id;
     }
-    if (conversionDto.fpDeals) {
-      payload.tracking14 = conversionDto.fpDeals;
+    if (conversionDto.lastAttribution.deal) {
+      payload.tracking14 = conversionDto.lastAttribution.deal;
     }
     if (conversionDto.lastAttribution?.tracking_id) {
       payload.tracking15 = conversionDto.lastAttribution.tracking_id;
