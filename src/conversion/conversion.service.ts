@@ -1398,6 +1398,7 @@ export class ConversionService {
     }
     if (attr.funnelId) payload.tracking16 = attr.funnelId;
     if (attr.nodeId) payload.tracking17 = attr.nodeId;
+    if (attr.device) payload.tracking20 = attr.device;
   }
 
   /**
@@ -1741,6 +1742,7 @@ export class ConversionService {
     if (lastOrderToUse.tracking15) lastAttribution.tracking_id = lastOrderToUse.tracking15;
     if (lastOrderToUse.tracking16) lastAttribution.funnelId = lastOrderToUse.tracking16;
     if (lastOrderToUse.tracking17) lastAttribution.nodeId = lastOrderToUse.tracking17;
+    if (lastOrderToUse.tracking20) lastAttribution.device = lastOrderToUse.tracking20;
 
     // Construct ConversionDto for upsell
     const conversionDto: ConversionDto = {

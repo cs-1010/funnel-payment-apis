@@ -237,6 +237,7 @@ export class VrioService {
    * tracking8: utm_medium
    * tracking9: reason_for_buying
    * tracking10: (empty in mapping)
+   * tracking20: device
    */
   private mapToVrioFormat(prospectData: any): any {
     const vrioPayload: any = {
@@ -296,6 +297,11 @@ export class VrioService {
 
       if (attr.nodeId) {
         vrioPayload.tracking17 = attr.nodeId;
+      }
+
+      // tracking20: device
+      if (attr.device) {
+        vrioPayload.tracking20 = attr.device;
       }
     }
 
@@ -820,6 +826,11 @@ export class VrioService {
       // tracking6: campaign_id
       if (attr.campaign_id) {
         vrioPayload.tracking6 = attr.campaign_id;
+      }
+
+      // tracking20: device
+      if (attr.device) {
+        vrioPayload.tracking20 = attr.device;
       }
     }
 
