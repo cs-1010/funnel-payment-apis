@@ -6,6 +6,7 @@ import { CommonModule } from '../common/common.module';
 import { ActiveCampaignModule } from '../active-campaign/active-campaign.module';
 import { StickyModule } from '../sticky/sticky.module';
 import { VrioModule } from '../vrio/vrio.module';
+import { EmailUpsellAccountService } from './email-upsell-account.service';
 
 
 @Module({
@@ -18,7 +19,6 @@ import { VrioModule } from '../vrio/vrio.module';
     
   ],
   controllers: [ConversionController],
-  providers: [ConversionService],
+  providers: [ConversionService, EmailUpsellAccountService],
 })
 export class ConversionModule {}
-

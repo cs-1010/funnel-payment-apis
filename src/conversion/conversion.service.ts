@@ -5,7 +5,8 @@ import { ConversionDto } from './dto/conversion.dto';
 import { StickyService } from '../sticky/sticky.service';
 import { VrioService } from '../vrio/vrio.service';
 
-import { ActiveCampaignService } from 'src/active-campaign/active-campaign.service';
+import { ActiveCampaignService } from '../active-campaign/active-campaign.service';
+import { EmailUpsellAccountService, EmailUpsellAccountError } from './email-upsell-account.service';
 
 import { JobService } from '../common/services/job.service';
 import { HttpService } from '@nestjs/axios';
@@ -30,6 +31,7 @@ export class ConversionService {
   
     private readonly httpService: HttpService,
     private readonly configService: ConfigService,
+    private readonly emailUpsellAccountService: EmailUpsellAccountService,
   ) {
     const v = this.configService.get<string>('VERBOSE_CHECKOUT_LOG');
     this.verboseCheckoutLog = v === 'true' || v === '1';
@@ -1744,6 +1746,21 @@ export class ConversionService {
     if (lastOrderToUse.tracking17) lastAttribution.nodeId = lastOrderToUse.tracking17;
     if (lastOrderToUse.tracking20) lastAttribution.device = lastOrderToUse.tracking20;
 
+    // Resolve ownership before making any charge request. The controller's
+    // existing error path returns the customer to checkout for unresolved cases.
+    let accountId: string;
+    try {
+      accountId = await this.emailUpsellAccountService.resolve(lastOrderToUse, customerId);
+    } catch (error) {
+      const code = error instanceof EmailUpsellAccountError ? error.code : 'ACCOUNT_CONTEXT_UNAVAILABLE';
+      this.logger.warn(`Email upsell not submitted: ${code}`);
+      await this.jobService.createJob(JobType.ERROR, {
+        errorMessage: 'Email upsell account could not be verified; no charge was submitted',
+        code, offerId, productId,
+      });
+      return { error_message: 'Unable to verify this order. Please continue through checkout.', error_found: '1', code };
+    }
+
     // Construct ConversionDto for upsell
     const conversionDto: ConversionDto = {
       conversionType: ConversionType.UPSELL,
@@ -1768,7 +1785,7 @@ export class ConversionService {
       lastAttribution: lastAttribution,
       ipAddress: lastOrderToUse.ip_address,
       merchantId: merchantId,
-      accountId: '', // Required field, set to empty string for upsell-by-email flow
+      accountId,
       externalIds: {} // Required field, set to empty object for upsell-by-email flow
     };
 
