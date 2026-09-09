@@ -334,7 +334,8 @@ export class VrioService {
     // Add additional fields if available, use "not available" for missing fields
     vrioPayload.first_name = prospectData.firstName || 'not available';
     vrioPayload.last_name = prospectData.lastName || 'not available';
-    vrioPayload.phone = prospectData.phone || 'not available';
+    const phone = typeof prospectData.phone === 'string' ? prospectData.phone.trim() : '';
+    if (phone) vrioPayload.phone = phone;
     vrioPayload.city = prospectData.city || 'not available';
     vrioPayload.state = prospectData.state || 'CA';
     vrioPayload.zip = prospectData.zip || 'not available';
@@ -982,7 +983,7 @@ export class VrioService {
   /**
    * Update customer information in VRIO
    */
-  async updateCustomer(customerId: number, customerData: { firstName?: string; lastName?: string }): Promise<VrioApiResponse | null> {
+  async updateCustomer(customerId: number, customerData: { firstName?: string; lastName?: string; phone?: string }): Promise<VrioApiResponse | null> {
     const apiUrl = `${this.apiUrl}/customers/${customerId}`;
 
     try {
@@ -1004,6 +1005,9 @@ export class VrioService {
         vrioPayload.last_name = customerData.lastName;
       }
       
+      const phone = customerData.phone?.trim();
+      if (phone) vrioPayload.phone = phone;
+
       // If no data to update, return early
       if (Object.keys(vrioPayload).length === 0) {
         this.logger.log('No customer data to update');

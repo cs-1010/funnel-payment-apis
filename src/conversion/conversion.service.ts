@@ -285,13 +285,16 @@ export class ConversionService {
     if (conversionDto.prevOrderId && conversionDto.customerId) {
       this.logger.log('Scenario 2: Direct checkout with existing customer');
       
-      // Update customer first and last name in VRIO if available
-      if (conversionDto.firstName || conversionDto.lastName) {
+      // Checkout can collect a phone after the customer was created at signup.
+      // Omitting an optional phone must not clear the customer's existing number.
+      const phone = conversionDto.phone?.trim();
+      if (conversionDto.firstName || conversionDto.lastName || phone) {
         try {
           this.logger.log(`Updating customer ${conversionDto.customerId} with firstName: ${conversionDto.firstName}, lastName: ${conversionDto.lastName}`);
           await this.vrioService.updateCustomer(conversionDto.customerId, {
             firstName: conversionDto.firstName,
-            lastName: conversionDto.lastName
+            lastName: conversionDto.lastName,
+            ...(phone && { phone }),
           });
           this.logger.log('Customer update completed successfully');
         } catch (error) {

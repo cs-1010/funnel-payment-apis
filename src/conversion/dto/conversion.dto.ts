@@ -12,7 +12,7 @@ import {
   IsObject,
   IsNumber,
 } from 'class-validator';
-import { Expose, Type } from 'class-transformer';
+import { Expose, Transform, Type } from 'class-transformer';
 
 export enum ConversionType {
   SIGNUP = 'SIGNUP',
@@ -53,6 +53,7 @@ export class ConversionDto {
   @MaxLength(50, { message: 'Last name must not exceed 50 characters' })
   lastName?: string;
 
+  @Transform(({ value }) => typeof value === 'string' ? value.trim() || undefined : value)
   @IsOptional()
   @IsString()
   @MaxLength(20, { message: 'Phone number must not exceed 20 characters' })
