@@ -229,8 +229,8 @@ export class VrioService {
    * Based on the tracking variable mapping provided in the image:
    * tracking1: utm_campaign
    * tracking2: utm_source  
-   * tracking3: h_ad_id
-   * tracking4: adid
+   * tracking3: h_ad_id (fallback: adid)
+   * tracking4: ftNodeId (PURCHASE checkout node id)
    * tracking5: gc_id
    * tracking6: campaign_id
    * tracking7: utm_content
@@ -261,14 +261,11 @@ export class VrioService {
         vrioPayload.tracking2 = attr.utm_source;
       }
       
-      // tracking3: h_ad_id
+      // tracking3: h_ad_id, fallback to adid
       if (attr.h_ad_id) {
         vrioPayload.tracking3 = attr.h_ad_id;
-      }
-      
-      // tracking4: adid
-      if (attr.adid) {
-        vrioPayload.tracking4 = attr.adid;
+      } else if (attr.adid) {
+        vrioPayload.tracking3 = attr.adid;
       }
       
       // tracking5: gc_id
@@ -809,14 +806,11 @@ export class VrioService {
         vrioPayload.tracking2 = attr.utm_source;
       }
       
-      // tracking3: h_ad_id
+      // tracking3: h_ad_id, fallback to adid
       if (attr.h_ad_id) {
         vrioPayload.tracking3 = attr.h_ad_id;
-      }
-      
-      // tracking4: adid
-      if (attr.adid) {
-        vrioPayload.tracking4 = attr.adid;
+      } else if (attr.adid) {
+        vrioPayload.tracking3 = attr.adid;
       }
       
       // tracking5: gc_id

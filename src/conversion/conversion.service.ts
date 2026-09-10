@@ -1324,6 +1324,11 @@ export class ConversionService {
       vrioPayload.shipping_profile_id = checkoutData.shippingProfileId;
     }
 
+    // tracking4: checkout node id (PURCHASE)
+    if (checkoutData.ftNodeId) {
+      vrioPayload.tracking4 = checkoutData.ftNodeId;
+    }
+
     // Map offers - only include bump offer if isBump is true
     
     return vrioPayload;
@@ -1381,8 +1386,12 @@ export class ConversionService {
 
     if (attr.utm_campaign) payload.tracking1 = attr.utm_campaign;
     if (attr.utm_source) payload.tracking2 = attr.utm_source;
-    if (attr.h_ad_id) payload.tracking3 = attr.h_ad_id;
-    if (attr.adid) payload.tracking4 = attr.adid;
+    // tracking3: h_ad_id, fallback to adid
+    if (attr.h_ad_id) {
+      payload.tracking3 = attr.h_ad_id;
+    } else if (attr.adid) {
+      payload.tracking3 = attr.adid;
+    }
     if (attr.gc_id) payload.tracking5 = attr.gc_id;
     if (attr.campaign_id) payload.tracking6 = attr.campaign_id;
 
@@ -1738,7 +1747,6 @@ export class ConversionService {
     if (lastOrderToUse.tracking1) lastAttribution.utm_campaign = lastOrderToUse.tracking1;
     if (lastOrderToUse.tracking2) lastAttribution.utm_source = lastOrderToUse.tracking2;
     if (lastOrderToUse.tracking3) lastAttribution.h_ad_id = lastOrderToUse.tracking3;
-    if (lastOrderToUse.tracking4) lastAttribution.adid = lastOrderToUse.tracking4;
     if (lastOrderToUse.tracking5) lastAttribution.gc_id = lastOrderToUse.tracking5;
     if (lastOrderToUse.tracking6) lastAttribution.campaign_id = lastOrderToUse.tracking6;
     if (lastOrderToUse.tracking12) lastAttribution._ef_transaction_id = lastOrderToUse.tracking12;
