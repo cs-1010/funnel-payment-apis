@@ -1632,6 +1632,34 @@ export class ConversionService {
   }
 
   async processUpsellByEmail(email: string, offerId: string, productId: string): Promise<any> {
+    try {
+      return await this.processUpsellByEmailInternal(email, offerId, productId);
+    } catch (error) {
+      const errorMessage =
+        error?.response?.message ||
+        error?.message ||
+        'Upsell by email failed';
+      this.logger.error(
+        `processUpsellByEmail failed email=${email} offerId=${offerId} productId=${productId}: ${errorMessage}`,
+        error?.stack,
+      );
+      await this.jobService.createJob(JobType.ERROR, {
+        errorMessage: typeof errorMessage === 'string' ? errorMessage : 'Upsell by email failed',
+        email,
+        offerId,
+        productId,
+      });
+      return {
+        error_message: typeof errorMessage === 'string' ? errorMessage : 'Upsell by email failed',
+        error_found: '1',
+        email,
+        offerId,
+        productId,
+      };
+    }
+  }
+
+  private async processUpsellByEmailInternal(email: string, offerId: string, productId: string): Promise<any> {
     this.logger.log(`Processing upsell by email: ${email}, offerId: ${offerId}, productId: ${productId}`);
    
     // Fetch customer and last order from VRIO API

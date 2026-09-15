@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, UseGuards, Query, Res, Req } from '@nestjs/common';
+import { Body, Controller, Get, Post, UseGuards, Query, Res, Req, Logger } from '@nestjs/common';
 import { ConversionService } from './conversion.service';
 import { ThrottlerGuard, Throttle } from '@nestjs/throttler';
 import { ConversionDto } from './dto/conversion.dto';
@@ -16,6 +16,8 @@ const ALLOWED_MEMBERS_HOSTS = new Set([
 @Controller('conversion')
 @UseGuards(ThrottlerGuard)
 export class ConversionController {
+    private readonly logger = new Logger(ConversionController.name);
+
     constructor(
         private readonly conversionService: ConversionService,
         private readonly vrioService: VrioService
@@ -44,6 +46,25 @@ export class ConversionController {
         }
 
         return DEFAULT_MEMBERS_HOST;
+    }
+
+    private buildCheckoutRedirectUrl(
+        membersHost: string,
+        offerId: string,
+        productId: string,
+        email: string,
+        errorMessage?: string,
+    ): string {
+        const params = new URLSearchParams({
+            offerId: offerId || '',
+            productId: productId || '',
+            email: email || '',
+        });
+        if (errorMessage) {
+            params.set('error_found', '1');
+            params.set('error_message', errorMessage.slice(0, 300));
+        }
+        return `https://${membersHost}/checkout-page?${params.toString()}`;
     }
 
     @Post()
@@ -101,44 +122,102 @@ export class ConversionController {
     @Throttle({ default: { limit: 50, ttl: 60000 } })
     async upsellByEmail(
         @Query() upsellDto: UpsellByEmailDto,
+        @Query('debug') debug: string | undefined,
         @Req() req: Request,
         @Res() res: Response,
         @InjectIP() ipAddress: string
     ) {
-        const result = await this.conversionService.processUpsellByEmail(
-            upsellDto.email,
-            upsellDto.offerId,
-            upsellDto.productId
+        const membersHost = this.resolveMembersHost(req);
+        const debugMode = debug === '1' || debug === 'true';
+        const startedAt = Date.now();
+
+        this.logger.log(
+            `upsell-by-email start email=${upsellDto.email} offerId=${upsellDto.offerId} productId=${upsellDto.productId} membersHost=${membersHost} ip=${ipAddress} origin=${req.headers.origin || ''} referer=${req.headers.referer || ''}`,
         );
 
-        const membersHost = this.resolveMembersHost(req);
-        
-        //return res.status(200).json(result);
-        // Check if upsell was successful (has order_id)
-        if (result && result.order_id && !result.error_found) {
-            // Redirect to success URL
-            return res.redirect(`https://${membersHost}/order-confirmation?success=1`);
-        } else {
-            // Extract offerId, productId, email - result can have different structures:
-            // 1. VRIO error (payment failed): postedPayload.offers[0], postedPayload.email
-            // 2. Early return from processUpsellByEmail: result.email, result.offerId, result.productId
-            // 3. Fallback to original request params (upsellDto)
-            const offerId = result?.postedPayload?.offers?.[0]?.offerId
-                || result?.postedPayload?.mainOfferId
-                || result?.offerId
-                || upsellDto.offerId;
-            const productId = result?.postedPayload?.offers?.[0]?.productId
-                || result?.postedPayload?.mainProductId
-                || result?.productId
-                || upsellDto.productId;
-            const email = result?.postedPayload?.email
-                || result?.email
-                || upsellDto.email;
-            return res.redirect(`https://${membersHost}/checkout-page?offerId=${offerId}&productId=${productId}&email=${encodeURIComponent(email || '')}`);
+        let result: any;
+        try {
+            result = await this.conversionService.processUpsellByEmail(
+                upsellDto.email,
+                upsellDto.offerId,
+                upsellDto.productId
+            );
+        } catch (error) {
+            const errorMessage =
+                error?.response?.message ||
+                error?.message ||
+                'Upsell processing failed';
+            const elapsedMs = Date.now() - startedAt;
+
+            this.logger.error(
+                `upsell-by-email exception after ${elapsedMs}ms email=${upsellDto.email} offerId=${upsellDto.offerId} productId=${upsellDto.productId} membersHost=${membersHost}: ${errorMessage}`,
+                error?.stack,
+            );
+
+            if (debugMode) {
+                return res.status(500).json({
+                    error_found: '1',
+                    error_message: errorMessage,
+                    email: upsellDto.email,
+                    offerId: upsellDto.offerId,
+                    productId: upsellDto.productId,
+                    membersHost,
+                    elapsedMs,
+                    status: error?.status || error?.statusCode || null,
+                });
+            }
+
+            return res.redirect(
+                this.buildCheckoutRedirectUrl(
+                    membersHost,
+                    upsellDto.offerId,
+                    upsellDto.productId,
+                    upsellDto.email,
+                    typeof errorMessage === 'string' ? errorMessage : 'Upsell processing failed',
+                ),
+            );
         }
-        
-        // If failed, return error response
-        return res.status(400).json(result || { error_message: 'Upsell processing failed', error_found: "1" });
+
+        const elapsedMs = Date.now() - startedAt;
+        const success = !!(result && result.order_id && !result.error_found);
+
+        this.logger.log(
+            `upsell-by-email done after ${elapsedMs}ms success=${success} order_id=${result?.order_id ?? ''} error=${result?.error_message || result?.errorMessage || result?.error || ''}`,
+        );
+
+        if (debugMode) {
+            return res.status(success ? 200 : 400).json({
+                success,
+                membersHost,
+                elapsedMs,
+                result,
+            });
+        }
+
+        if (success) {
+            return res.redirect(`https://${membersHost}/order-confirmation?success=1`);
+        }
+
+        const offerId = result?.postedPayload?.offers?.[0]?.offerId
+            || result?.postedPayload?.mainOfferId
+            || result?.offerId
+            || upsellDto.offerId;
+        const productId = result?.postedPayload?.offers?.[0]?.productId
+            || result?.postedPayload?.mainProductId
+            || result?.productId
+            || upsellDto.productId;
+        const email = result?.postedPayload?.email
+            || result?.email
+            || upsellDto.email;
+        const errorMessage =
+            result?.error_message ||
+            result?.errorMessage ||
+            (typeof result?.error === 'string' ? result.error : undefined) ||
+            'Upsell processing failed';
+
+        return res.redirect(
+            this.buildCheckoutRedirectUrl(membersHost, offerId, productId, email, errorMessage),
+        );
     }
 
 }
