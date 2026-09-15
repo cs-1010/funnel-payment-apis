@@ -1,11 +1,17 @@
-import { Body, Controller, Get, Post, UseGuards, Query, Res } from '@nestjs/common';
+import { Body, Controller, Get, Post, UseGuards, Query, Res, Req } from '@nestjs/common';
 import { ConversionService } from './conversion.service';
 import { ThrottlerGuard, Throttle } from '@nestjs/throttler';
 import { ConversionDto } from './dto/conversion.dto';
 import { UpsellByEmailDto } from './dto/upsell-by-email.dto';
 import { InjectIP } from '../common/decorators/inject-ip.decorator';
 import { VrioService } from '../vrio/vrio.service';
-import { Response } from 'express';
+import { Request, Response } from 'express';
+
+const DEFAULT_MEMBERS_HOST = 'members.bigbudget.com';
+const ALLOWED_MEMBERS_HOSTS = new Set([
+    'members.bigbudget.com',
+    'new-members.bigbudget.com',
+]);
 
 @Controller('conversion')
 @UseGuards(ThrottlerGuard)
@@ -14,6 +20,31 @@ export class ConversionController {
         private readonly conversionService: ConversionService,
         private readonly vrioService: VrioService
     ) { }
+
+    /**
+     * Resolve redirect host from the calling members site (Origin/Referer).
+     * Falls back to members.bigbudget.com when unknown.
+     */
+    private resolveMembersHost(req: Request): string {
+        const candidates = [
+            req.headers.origin,
+            req.headers.referer,
+        ];
+
+        for (const candidate of candidates) {
+            if (!candidate || typeof candidate !== 'string') continue;
+            try {
+                const hostname = new URL(candidate).hostname.toLowerCase();
+                if (ALLOWED_MEMBERS_HOSTS.has(hostname)) {
+                    return hostname;
+                }
+            } catch {
+                // ignore invalid URL
+            }
+        }
+
+        return DEFAULT_MEMBERS_HOST;
+    }
 
     @Post()
     @Throttle({ default: { limit: 50, ttl: 60000 } })
@@ -70,6 +101,7 @@ export class ConversionController {
     @Throttle({ default: { limit: 50, ttl: 60000 } })
     async upsellByEmail(
         @Query() upsellDto: UpsellByEmailDto,
+        @Req() req: Request,
         @Res() res: Response,
         @InjectIP() ipAddress: string
     ) {
@@ -78,12 +110,14 @@ export class ConversionController {
             upsellDto.offerId,
             upsellDto.productId
         );
+
+        const membersHost = this.resolveMembersHost(req);
         
         //return res.status(200).json(result);
         // Check if upsell was successful (has order_id)
         if (result && result.order_id && !result.error_found) {
             // Redirect to success URL
-            return res.redirect('https://members.bigbudget.com/order-confirmation?success=1');
+            return res.redirect(`https://${membersHost}/order-confirmation?success=1`);
         } else {
             // Extract offerId, productId, email - result can have different structures:
             // 1. VRIO error (payment failed): postedPayload.offers[0], postedPayload.email
@@ -100,7 +134,7 @@ export class ConversionController {
             const email = result?.postedPayload?.email
                 || result?.email
                 || upsellDto.email;
-            return res.redirect(`https://members.bigbudget.com/checkout-page?offerId=${offerId}&productId=${productId}&email=${encodeURIComponent(email || '')}`);
+            return res.redirect(`https://${membersHost}/checkout-page?offerId=${offerId}&productId=${productId}&email=${encodeURIComponent(email || '')}`);
         }
         
         // If failed, return error response
