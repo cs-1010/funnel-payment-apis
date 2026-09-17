@@ -1,6 +1,7 @@
 import {  Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { safeJsonForLog } from '../common/utils/sanitize-for-log';
+import { normalizeConversionJourney } from './conversion-journey';
 import { ConversionDto } from './dto/conversion.dto';
 import { StickyService } from '../sticky/sticky.service';
 import { VrioService } from '../vrio/vrio.service';
@@ -49,6 +50,7 @@ export class ConversionService {
 
 
   async process(conversionDto: ConversionDto) {
+    normalizeConversionJourney(conversionDto);
     // Map mainOrderId to prevOrderId if mainOrderId is provided
     if (conversionDto.mainOrderId && !conversionDto.prevOrderId) {
       conversionDto.prevOrderId = conversionDto.mainOrderId;
@@ -109,6 +111,7 @@ export class ConversionService {
 
   
   async processSignup(conversionDto: ConversionDto) {
+    normalizeConversionJourney(conversionDto);
 
     const prospectData:any = {
       campaignId: conversionDto.stickyCampaignId.toString(),
@@ -151,6 +154,7 @@ export class ConversionService {
   }
 
   async processCheckout(conversionDto: ConversionDto): Promise<any> {
+    normalizeConversionJourney(conversionDto);
     
     
     const offers = this.normalizeOffers(conversionDto.offers);
@@ -584,6 +588,7 @@ export class ConversionService {
 
 
   async processUpsell(conversionDto: ConversionDto): Promise<any> {
+    normalizeConversionJourney(conversionDto);
     const offers = this.normalizeOffers(conversionDto.offers);
     
     // Check if offers are empty
@@ -996,6 +1001,7 @@ export class ConversionService {
   }
 
   private prepareQueueData(responseData: any, conversionDto: ConversionDto, checkoutData: any): any {
+    normalizeConversionJourney(conversionDto);
     // Create a sanitized version of funnelDto without sensitive data
     const sanitizedFunnelDto = { ...conversionDto };
     

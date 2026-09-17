@@ -37,12 +37,12 @@ export class JobService {
       accountId = null;
     } else if (jobData.postedPayload) {
       // For regular jobs with postedPayload structure
-      visitorId = jobData.postedPayload.visitorId;
+      visitorId = jobData.postedPayload.visitorId || jobData.postedPayload.ftVisitorId;
       ipAddress = jobData.postedPayload.ipAddress;
       accountId = jobData.postedPayload.accountId;
     } else {
       // Fallback for other structures
-      visitorId = jobData.visitorId;
+      visitorId = jobData.visitorId || jobData.ftVisitorId;
       ipAddress = jobData.ipAddress;
       accountId = jobData.accountId;
     }
@@ -128,4 +128,4 @@ export class JobService {
       throw error;
     }
   }
-} 
+}

@@ -296,7 +296,7 @@ export class ConversionDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(100, { message: 'Visitor ID must not exceed 100 characters' })
+  @MaxLength(128, { message: 'Visitor ID must not exceed 128 characters' })
   visitorId?: string;
 
   @IsOptional()
