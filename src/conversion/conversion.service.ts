@@ -351,7 +351,7 @@ export class ConversionService {
         });
       }
 
-      const response = await this.vrioService.processCheckout(conversionDto.prevOrderId.toString(), vrioPayload);
+      const response = await this.vrioService.processCheckout(conversionDto.prevOrderId.toString(), vrioPayload, this.subscriptionRoutingContext(conversionDto));
 
       // Comment out Sticky service call
       // const response = await this.stickyService.processNewOrder(processedData);
@@ -428,6 +428,7 @@ export class ConversionService {
 
             const bumpRes = await this.vrioService.processUpsell(bumpUpsellPayload, {
               minimalLog: true,
+              routingContext: this.subscriptionRoutingContext(conversionDto),
             });
 
             this.logBumpCheckout('bump_upsell_result', {
@@ -527,6 +528,7 @@ export class ConversionService {
 
                 const bumpRes = await this.vrioService.processUpsell(bumpUpsellPayload, {
                   minimalLog: true,
+                  routingContext: this.subscriptionRoutingContext(conversionDto),
                 });
 
                 this.logBumpCheckout('bump_upsell_result_fallback', {
@@ -660,7 +662,7 @@ export class ConversionService {
     };
     
     // Use VRIO service for upsell
-    const response = await this.vrioService.processUpsell(updatedVrioPayload);
+    const response = await this.vrioService.processUpsell(updatedVrioPayload, { routingContext: this.subscriptionRoutingContext(conversionDto) });
 
     const queueData = this.prepareQueueData(response, conversionDto, vrioPayload);
     
@@ -694,6 +696,15 @@ export class ConversionService {
     return queueData;
   }
  
+
+  private subscriptionRoutingContext(dto: ConversionDto) {
+    return {
+      funnelId: dto.ftFunnelId,
+      attributionFunnelId: dto.lastAttribution?.funnelId,
+      accountId: dto.accountId,
+      nodeId: dto.ftNodeId || dto.lastAttribution?.nodeId,
+    };
+  }
 
   private normalizeOffers(offers: any): any[] {
     if (Array.isArray(offers)) {
@@ -783,7 +794,7 @@ export class ConversionService {
           offers: vrioOffers
         };
 
-        const response = await this.vrioService.processCheckout(conversionDto.prevOrderId?.toString() || '', fallbackVrioPayload);
+        const response = await this.vrioService.processCheckout(conversionDto.prevOrderId?.toString() || '', fallbackVrioPayload, this.subscriptionRoutingContext(conversionDto));
         
         if (response?.order_id) {
           this.logger.log(`Fallback offer successful with priority ${fallbackOffer.priority}`);
@@ -882,7 +893,7 @@ export class ConversionService {
         };
 
         
-        const response = await this.vrioService.processUpsell(fallbackVrioPayload);
+        const response = await this.vrioService.processUpsell(fallbackVrioPayload, { routingContext: this.subscriptionRoutingContext(conversionDto) });
         
         if (response?.order_id) {
           this.logger.log(`Fallback upsell offer successful with priority ${fallbackOffer.priority}`);

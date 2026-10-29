@@ -1,4 +1,6 @@
-import { Injectable, HttpException, HttpStatus, Logger } from '@nestjs/common';
+import { Injectable, HttpException, HttpStatus, Logger, Optional, ServiceUnavailableException } from '@nestjs/common';
+import { InjectConnection } from '@nestjs/mongoose';
+import { Connection, Types } from 'mongoose';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
@@ -7,6 +9,13 @@ import * as https from 'https';
 import { safeJsonForLog } from '../common/utils/sanitize-for-log';
 
 // Define interfaces for VRIO API responses
+export interface SubscriptionRoutingContext {
+  funnelId?: string;
+  attributionFunnelId?: string;
+  accountId?: string;
+  nodeId?: string;
+}
+
 export interface VrioApiResponse {
   order_id?: number;
   campaign_id?: number;
@@ -62,12 +71,14 @@ export class VrioService {
   private readonly logger = new Logger(VrioService.name);
   private readonly apiUrl: string;
   private readonly apiKey: string;
+  private readonly offerTypes = new Map<number, { type: number; expires: number }>();
   /** Bump/checkout diagnostics (full upsell body, etc.). Off unless `VERBOSE_CHECKOUT_LOG=true`. */
   private readonly verboseCheckoutLog: boolean;
 
   constructor(
     private readonly httpService: HttpService,
     private readonly configService: ConfigService,
+    @Optional() @InjectConnection() private readonly connection?: Connection,
   ) {
     this.apiUrl = this.configService.get<string>('VRIO_API_URL') || '';
     this.apiKey = this.configService.get<string>('VRIO_API_KEY') || '';
@@ -82,6 +93,51 @@ export class VrioService {
       this.logger.error(`API URL: ${this.apiUrl}`);
       this.logger.error(`API Key present: ${!!this.apiKey}`);
     }
+  }
+
+  private async applySubscriptionRoute(payload: any, context?: SubscriptionRoutingContext): Promise<void> {
+    // Routing applies to this request only; never carry a previous attempt's override.
+    delete payload.route_id;
+    const offers = payload.offers;
+    if (!Array.isArray(offers) || !offers.length) return;
+    const ids = [...new Set<number>(offers.map((offer: any) => Number(offer.offer_id)))];
+    if (ids.some(id => !Number.isSafeInteger(id) || id <= 0)) {
+      throw new ServiceUnavailableException('Cannot verify payment offer routing');
+    }
+    let recurring = false;
+    for (const id of ids) {
+      const cached = this.offerTypes.get(id);
+      let type = cached && cached.expires > Date.now() ? cached.type : undefined;
+      if (type === undefined) {
+        const offer = await this.getOfferById(id);
+        type = Number(offer?.offer_type_id);
+        if (!Number.isSafeInteger(type) || type <= 0) {
+          throw new ServiceUnavailableException('Cannot verify payment offer routing');
+        }
+        if (this.offerTypes.size >= 500) this.offerTypes.delete(this.offerTypes.keys().next().value!);
+        this.offerTypes.set(id, { type, expires: Date.now() + 60_000 });
+      }
+      if (type === 2) recurring = true;
+    }
+    if (!recurring) return;
+    const funnelId = context?.funnelId || context?.attributionFunnelId;
+    if (!funnelId || !/^[a-f\d]{24}$/i.test(funnelId) || !context?.accountId ||
+        (context.funnelId && context.attributionFunnelId && context.funnelId !== context.attributionFunnelId) ||
+        (context.nodeId && !/^[A-Za-z0-9_-]{1,200}$/.test(context.nodeId))) {
+      throw new ServiceUnavailableException('Cannot verify subscription funnel');
+    }
+    if (!this.connection) throw new ServiceUnavailableException('Subscription routing is unavailable');
+    const funnel = await this.connection.collection('funnels').findOne({
+      _id: new Types.ObjectId(funnelId), accountId: context.accountId, isArchived: { $ne: true },
+      ...(context.nodeId && { 'nodes.id': context.nodeId }),
+    }, { projection: { subscription_route_id: 1 }, maxTimeMS: 3000 });
+    const routeId = funnel?.subscription_route_id;
+    if (typeof routeId !== 'number' || !Number.isSafeInteger(routeId) || routeId <= 0) {
+      throw new ServiceUnavailableException('Subscription route is not configured for this funnel');
+    }
+    payload.route_id = routeId;
+    // Vrio gives merchant_id priority over route_id. Let the selected router choose.
+    delete payload.merchant_id;
   }
 
   private getAuthConfig() {
@@ -345,7 +401,7 @@ export class VrioService {
   /**
    * Process checkout for existing customer in VRIO
    */
-  async processCheckout(prevOrderId: string, vrioPayload: any): Promise<VrioApiResponse | null> {
+  async processCheckout(prevOrderId: string, vrioPayload: any, context?: SubscriptionRoutingContext): Promise<VrioApiResponse | null> {
     const apiUrl = `${this.apiUrl}/orders/${prevOrderId}/process`;
     
   
@@ -360,15 +416,14 @@ export class VrioService {
         throw new Error('Customer ID is required for VRIO checkout');
       }
       
+      const requestPayload = { ...vrioPayload };
+      await this.applySubscriptionRoute(requestPayload, context);
       const authConfig = this.getAuthConfig();
-
-      
-      
       let response: AxiosResponse<VrioApiResponse>;
 
       try {
         response = await firstValueFrom(
-          this.httpService.post<VrioApiResponse>(apiUrl, vrioPayload, authConfig)
+          this.httpService.post<VrioApiResponse>(apiUrl, requestPayload, authConfig)
         );
      
      
@@ -556,7 +611,7 @@ export class VrioService {
    */
   async processUpsell(
     upsellData: any,
-    options?: { minimalLog?: boolean },
+    options?: { minimalLog?: boolean; routingContext?: SubscriptionRoutingContext },
   ): Promise<VrioApiResponse | null> {
     const apiUrl = `${this.apiUrl}/orders`;
     const minimalLog = !!options?.minimalLog;
@@ -574,36 +629,9 @@ export class VrioService {
       }*/
       
       // Map the data to VRIO upsell format
-      const vrioPayload = this.mapToVrioUpsellFormat(upsellData);
-      
-      // If the upsell offer is of type 2, force route_id = 5 when adding the order.
-      // (Matches: GET /offers/{offerId} -> offer_type_id === 2)
-      // Skip for campaigns 32 and 101 (do not set route_id / skip offer lookup for route).
-      const campaignIdForRoute = Number(vrioPayload?.campaign_id);
-      const skipRouteIdForCampaign =
-        campaignIdForRoute === 32 || campaignIdForRoute === 101;
+      const vrioPayload = { ...this.mapToVrioUpsellFormat(upsellData) };
 
-      if (vrioPayload && !('route_id' in vrioPayload) && !skipRouteIdForCampaign) {
-        const firstOfferId = Array.isArray(vrioPayload.offers) ? vrioPayload.offers?.[0]?.offer_id : undefined;
-        const offerIdAsNumber =
-          typeof firstOfferId === 'number'
-            ? firstOfferId
-            : typeof firstOfferId === 'string'
-              ? parseInt(firstOfferId, 10)
-              : undefined;
-
-        if (offerIdAsNumber) {
-          try {
-            const offer = await this.getOfferById(offerIdAsNumber);
-            if (offer && Number(offer.offer_type_id) === 2) {
-              (vrioPayload as any).route_id = 5;
-            }
-          } catch (e) {
-            // Don't block upsell processing if offer lookup fails
-            this.logger.warn(`Failed to lookup offer ${offerIdAsNumber} for route_id decision`);
-          }
-        }
-      }
+      await this.applySubscriptionRoute(vrioPayload, options?.routingContext);
 
       const authConfig = this.getAuthConfig();
 

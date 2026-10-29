@@ -21,6 +21,7 @@ describe('optional checkout phone', () => {
 
   function setup() {
     const http = {
+      get: jest.fn().mockReturnValue(of({ status: 200, data: { offer_id: 6, offer_type_id: 1 } })),
       patch: jest.fn().mockReturnValue(of({ status: 200, data: { customer_id: 42 } })),
       post: jest.fn().mockReturnValue(of({ status: 200, data: { order_id: 123, customer_id: 42 } })),
     };
