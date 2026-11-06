@@ -39,6 +39,30 @@ describe('optional checkout phone', () => {
   });
   afterEach(() => jest.restoreAllMocks());
 
+  it.each([
+    ['United States', 'US'], ['US', 'US'], [' united STATES ', 'US'],
+    ['Canada', 'CA'], ['CA', 'CA'], [' canada ', 'CA'],
+    [undefined, 'US'], [null, 'US'], ['', 'US'], ['   ', 'US'],
+  ])('passes billing country %s to Vrio as %s', async (billingCountry, expected) => {
+    const { service, http } = setup();
+    await service.process(await dto({ billingCountry }));
+    expect(http.post.mock.calls[0][1].bill_country).toBe(expected);
+  });
+
+  it('preserves Canadian billing country when creating a prospect before checkout', async () => {
+    const { service, http } = setup();
+    await service.process(await dto({ billingCountry: 'Canada', customerId: undefined, prevOrderId: undefined }));
+    const processing = http.post.mock.calls.find(([url]) => url.endsWith('/process'));
+    expect(processing![1].bill_country).toBe('CA');
+  });
+
+  it('rejects an unsupported country before contacting Vrio', async () => {
+    const { service, http } = setup();
+    await expect(service.process(await dto({ billingCountry: 'France' }))).rejects.toThrow('billingCountry');
+    expect(http.post).not.toHaveBeenCalled();
+    expect(http.patch).not.toHaveBeenCalled();
+  });
+
   it('keeps a formatted number through DTO validation, customer PATCH and the sale job', async () => {
     const { service, http, jobs } = setup();
     const result = await service.process(await dto({ phone: '  ' + number + '  ' }));

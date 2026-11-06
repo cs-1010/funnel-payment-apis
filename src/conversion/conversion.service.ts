@@ -2,6 +2,7 @@ import {  Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { safeJsonForLog } from '../common/utils/sanitize-for-log';
 import { normalizeConversionJourney } from './conversion-journey';
+import { normalizeBillingCountry } from './billing-country';
 import { ConversionDto } from './dto/conversion.dto';
 import { StickyService } from '../sticky/sticky.service';
 import { VrioService } from '../vrio/vrio.service';
@@ -50,6 +51,7 @@ export class ConversionService {
 
 
   async process(conversionDto: ConversionDto) {
+    conversionDto.billingCountry = normalizeBillingCountry(conversionDto.billingCountry);
     normalizeConversionJourney(conversionDto);
     // Map mainOrderId to prevOrderId if mainOrderId is provided
     if (conversionDto.mainOrderId && !conversionDto.prevOrderId) {
@@ -123,7 +125,7 @@ export class ConversionService {
       zip: conversionDto.zip || conversionDto.zip || '',
       state: conversionDto.state || 'CA',
       address1: conversionDto.address1 || '',
-      country: 'US',
+      country: normalizeBillingCountry(conversionDto.billingCountry),
       ipAddress: conversionDto.ipAddress || '127.0.0.1',
       reasonForBuying: conversionDto.reasonForBuying,
       lastAttribution: conversionDto.lastAttribution,
@@ -194,7 +196,7 @@ export class ConversionService {
         zip: conversionDto.zip || '',
         state: conversionDto.state || 'CA',
         address1: conversionDto.address1 || '',
-        country: 'US',
+        country: normalizeBillingCountry(conversionDto.billingCountry),
         ipAddress: conversionDto.ipAddress || '127.0.0.1',
         reasonForBuying: conversionDto.reasonForBuying,
         lastAttribution: conversionDto.lastAttribution,
@@ -248,7 +250,7 @@ export class ConversionService {
         zip: conversionDto.zip || '',
         state: conversionDto.state || 'CA',
         address1: conversionDto.address1 || '',
-        country: 'US',
+        country: normalizeBillingCountry(conversionDto.billingCountry),
         ipAddress: conversionDto.ipAddress || '127.0.0.1',
         reasonForBuying: conversionDto.reasonForBuying,
         lastAttribution: conversionDto.lastAttribution,
@@ -1128,9 +1130,7 @@ export class ConversionService {
       checkoutData.billingZip = conversionDto.billingZip;
     }
     
-    if (conversionDto.billingCountry) {
-      checkoutData.billingCountry = 'US';//conversionDto.billingCountry;
-    }
+    checkoutData.billingCountry = normalizeBillingCountry(conversionDto.billingCountry);
 
     // UTM Parameters
     if (conversionDto.lastAttribution?.utm_source) {
@@ -1331,7 +1331,7 @@ export class ConversionService {
       bill_lname: lastName,
       bill_address1: checkoutData.billingAddress || 'not available',
       bill_city: checkoutData.billingCity || 'not available',
-      bill_country: 'US', // Default to US
+      bill_country: normalizeBillingCountry(checkoutData.billingCountry),
       bill_state: checkoutData.billingState || 'CA',
       bill_zipcode: checkoutData.billingZip || 'not available',
     };
